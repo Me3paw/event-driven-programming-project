@@ -1,0 +1,7 @@
+.env
+.m2/
+.tools/
+dist/
+target/
+*.class
+
