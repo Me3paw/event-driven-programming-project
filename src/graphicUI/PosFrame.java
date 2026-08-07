@@ -1,4 +1,4 @@
-package com.me3paw.pos.ui;
+package graphicUI;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;

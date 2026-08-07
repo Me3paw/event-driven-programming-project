@@ -1,10 +1,10 @@
-package com.me3paw.pos;
+package graphicUI;
 
-import com.me3paw.pos.ui.PosFrame;
+import connectDB.DBConnection;
 
 import javax.swing.SwingUtilities;
 
-/** Application entry point for the POS visual prototype. */
+/** Application entry point for the in-memory POS visual prototype. */
 public final class PosApplication {
     private PosApplication() {
     }
@@ -20,7 +20,7 @@ public final class PosApplication {
             return;
         }
         if (args.length == 1 && "--db-smoke".equals(args[0])) {
-            System.exit(DbSmoke.run());
+            System.exit(DBConnection.smoke());
         }
         System.err.println("Usage: PosApplication [--db-smoke]");
         System.exit(2);
