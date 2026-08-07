@@ -23,7 +23,6 @@ import javax.swing.SwingConstants;
 import javax.swing.border.Border;
 import javax.swing.table.DefaultTableModel;
 
-/** Native Swing, in-memory visual scaffold. No data is persisted. */
 public final class PosFrame extends JFrame {
     private static final Color NAVY = new Color(31, 41, 55);
     private static final Color BLUE = new Color(37, 99, 235);

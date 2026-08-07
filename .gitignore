@@ -1,3 +1,5 @@
 .env
 bin/
 *.class
+*.md
+!README.md

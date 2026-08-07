@@ -6,7 +6,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-/** Minimal MariaDB connectivity check; it does not mutate application data. */
 public final class DBConnection {
     private DBConnection() {
     }

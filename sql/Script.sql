@@ -1,1 +1,0 @@
--- Schema intentionally deferred until the assignment requirements are known.

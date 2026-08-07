@@ -4,7 +4,6 @@ import connectDB.DBConnection;
 
 import javax.swing.SwingUtilities;
 
-/** Application entry point for the in-memory POS visual prototype. */
 public final class PosApplication {
     private PosApplication() {
     }
