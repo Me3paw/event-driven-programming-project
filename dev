@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+LOCAL="$ROOT/.dev"
+JDK="$LOCAL/jdk8"
+ECLIPSE="$LOCAL/eclipse"
+WORKSPACE="$LOCAL/workspace"
+JDK_ARCHIVE=OpenJDK8U-jdk_x64_linux_hotspot_8u504b01.tar.gz
+JDK_URL="https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u504-b01/$JDK_ARCHIVE"
+JDK_SHA256=9c70e102f527ac674ac2fe9c7d47b9a04e2d19842ba5ab8e9b33f368bbadfaea
+ECLIPSE_ARCHIVE=eclipse-java-2026-06-R-linux-gtk-x86_64.tar.gz
+ECLIPSE_URL="https://download.eclipse.org/technology/epp/downloads/release/2026-06/R/$ECLIPSE_ARCHIVE"
+ECLIPSE_SHA512=7e30aeaf1227068d00deabe45f397a9cb82a251f77c4df760e471f0811b9de4d5b5fcdfbe2ab750f0c9db68d3de763e32ae739ef4dc03617f7892f2accd3f344
+
+install_jdk() {
+    [[ -x "$JDK/bin/javac" ]] && return
+    mkdir -p "$LOCAL" "$JDK"
+    curl -fL --retry 3 -o "$LOCAL/$JDK_ARCHIVE" "$JDK_URL"
+    printf '%s  %s\n' "$JDK_SHA256" "$LOCAL/$JDK_ARCHIVE" | sha256sum -c -
+    tar -xzf "$LOCAL/$JDK_ARCHIVE" -C "$JDK" --strip-components=1
+    rm "$LOCAL/$JDK_ARCHIVE"
+}
+
+install_eclipse() {
+    [[ -x "$ECLIPSE/eclipse" ]] && return
+    mkdir -p "$LOCAL"
+    curl -fL --retry 3 -o "$LOCAL/$ECLIPSE_ARCHIVE" "$ECLIPSE_URL"
+    printf '%s  %s\n' "$ECLIPSE_SHA512" "$LOCAL/$ECLIPSE_ARCHIVE" | sha512sum -c -
+    tar -xzf "$LOCAL/$ECLIPSE_ARCHIVE" -C "$LOCAL"
+    rm "$LOCAL/$ECLIPSE_ARCHIVE"
+}
+
+configure_eclipse() {
+    local settings="$WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/.settings"
+    local vm_type=org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType
+    mkdir -p "$settings"
+    printf '%s\n' \
+        'eclipse.preferences.version=1' \
+        "org.eclipse.jdt.launching.PREF_VM_XML=<?xml version\\=\"1.0\" encoding\\=\"UTF-8\" standalone\\=\"no\"?>\\n<vmSettings defaultVM\\=\"57,${vm_type}9,temurin-8\" defaultVMConnector\\=\"\">\\n<vmType id\\=\"${vm_type}\">\\n<vm id\\=\"temurin-8\" name\\=\"Temurin 8\" path\\=\"${JDK}\"/>\\n</vmType>\\n</vmSettings>\\n" \
+        > "$settings/org.eclipse.jdt.launching.prefs"
+}
+
+build() {
+    install_jdk
+    mkdir -p "$ROOT/bin"
+    mapfile -d '' sources < <(find "$ROOT/src" -name '*.java' -print0)
+    "$JDK/bin/javac" -encoding UTF-8 -source 1.8 -target 1.8 \
+        -cp "$ROOT/lib/mariadb-java-client-3.5.7.jar" -d "$ROOT/bin" "${sources[@]}"
+}
+
+case "${1:-help}" in
+    setup)
+        install_jdk
+        install_eclipse
+        configure_eclipse
+        docker compose -f "$ROOT/compose.yaml" pull
+        ;;
+    eclipse)
+        install_jdk
+        install_eclipse
+        configure_eclipse
+        exec "$ECLIPSE/eclipse" -data "$WORKSPACE"
+        ;;
+    db-up)
+        docker compose -f "$ROOT/compose.yaml" up -d --wait
+        ;;
+    db-down)
+        docker compose -f "$ROOT/compose.yaml" down
+        ;;
+    build)
+        build
+        ;;
+    run)
+        "$0" db-up
+        build
+        POS_DB_URL="${POS_DB_URL:-jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi}" \
+        POS_DB_USER="${POS_DB_USER:-cua_hang_app}" POS_DB_PASSWORD="${POS_DB_PASSWORD:-cua_hang_dev}" \
+            exec "$JDK/bin/java" -cp "$ROOT/bin:$ROOT/lib/mariadb-java-client-3.5.7.jar" graphicUI.PosApplication
+        ;;
+    smoke)
+        "$0" db-up
+        build
+        POS_DB_URL=jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi \
+        POS_DB_USER=cua_hang_app POS_DB_PASSWORD=cua_hang_dev \
+            "$JDK/bin/java" -cp "$ROOT/bin:$ROOT/lib/mariadb-java-client-3.5.7.jar" graphicUI.PosApplication --db-smoke
+        ;;
+    backend-test)
+        "$0" db-up
+        build
+        POS_DB_URL=jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi \
+        POS_DB_USER=cua_hang_app POS_DB_PASSWORD=cua_hang_dev \
+            "$JDK/bin/java" -cp "$ROOT/bin:$ROOT/lib/mariadb-java-client-3.5.7.jar" testsupport.BackendSmoke
+        POS_DB_URL=jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi \
+        POS_DB_USER=cua_hang_app POS_DB_PASSWORD=cua_hang_dev \
+            "$JDK/bin/java" -cp "$ROOT/bin:$ROOT/lib/mariadb-java-client-3.5.7.jar" testsupport.BackendTransactionSmoke
+        ;;
+    wipe)
+        docker compose -f "$ROOT/compose.yaml" down --volumes --remove-orphans
+        [[ ! -e "$LOCAL" ]] || find "$LOCAL" -depth -delete
+        [[ ! -e "$ROOT/bin" ]] || find "$ROOT/bin" -depth -delete
+        ;;
+    help|*)
+        printf '%s\n' 'Usage: ./dev {setup|eclipse|db-up|db-down|build|run|smoke|backend-test|wipe}'
+        ;;
+esac
