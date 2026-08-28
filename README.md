@@ -17,6 +17,8 @@ Không cần cài Maven hoặc Gradle để mở và chạy dự án.
 
 ```text
 .
+├── .github/
+│   └── CODEOWNERS          Chủ sở hữu mã nguồn trên GitHub
 ├── .settings/             Cấu hình Java 8 và UTF-8 của Eclipse
 ├── lib/                   Thư viện JAR được thêm thủ công
 ├── sql/                   Tập tin SQL của dự án
@@ -108,6 +110,103 @@ Giao diện có thể chạy mà không cần cơ sở dữ liệu. Chỉ thực
 Chương trình trả mã `0` khi câu lệnh kiểm tra `SELECT 1` thành công. Mã `2` cho biết thiếu biến môi trường, mã `3` là kết quả không hợp lệ và mã `4` là lỗi kết nối JDBC.
 
 Sau khi kiểm tra, xóa `--db-smoke` khỏi Program arguments để chạy lại giao diện bình thường.
+
+## Quy trình làm việc với Git và GitHub
+
+Không làm tính năng mới trực tiếp trên nhánh `main`. Mỗi tính năng hoặc thay đổi phải có một nhánh riêng, sau đó tạo Pull Request để được kiểm tra và hợp nhất vào `main`.
+
+### Quy tắc đặt tên nhánh
+
+Tên nhánh dùng chữ thường, không dấu, không khoảng trắng và nối các từ bằng dấu gạch ngang.
+
+```text
+feature/ten-tinh-nang
+fix/ten-loi
+docs/noi-dung-tai-lieu
+```
+
+Ví dụ:
+
+```text
+feature/quan-ly-san-pham
+fix/loi-ket-noi-database
+docs/cap-nhat-huong-dan-eclipse
+```
+
+Sử dụng `feature/` cho tính năng mới, `fix/` cho sửa lỗi và `docs/` cho thay đổi tài liệu.
+
+### Tạo nhánh mới
+
+Trước khi bắt đầu, chuyển về `main` và lấy phiên bản mới nhất:
+
+```bash
+git switch main
+git pull origin main
+```
+
+Tạo nhánh mới từ `main`:
+
+```bash
+git switch -c feature/ten-tinh-nang
+```
+
+Thay `feature/ten-tinh-nang` bằng tên phù hợp với công việc đang thực hiện.
+
+### Lưu thay đổi bằng commit
+
+Kiểm tra các tập tin đã thay đổi:
+
+```bash
+git status
+```
+
+Thêm các tập tin cần lưu và tạo commit:
+
+```bash
+git add .
+git commit -m "feat: them chuc nang quan ly san pham"
+```
+
+Nội dung commit cần ngắn gọn và mô tả đúng thay đổi. Có thể dùng tiền tố `feat:`, `fix:` hoặc `docs:` tương ứng với loại công việc.
+
+### Đẩy nhánh lên GitHub
+
+Lần đầu đẩy một nhánh mới:
+
+```bash
+git push -u origin feature/ten-tinh-nang
+```
+
+Những lần tiếp theo trên cùng nhánh chỉ cần:
+
+```bash
+git push
+```
+
+Không dùng `git push origin main` cho công việc phát triển tính năng.
+
+### Tạo Pull Request
+
+1. Mở repository trên GitHub sau khi đã push nhánh.
+2. Chọn **Compare & pull request**. Nếu nút này không xuất hiện, mở thẻ **Pull requests** và chọn **New pull request**.
+3. Chọn **base: main**.
+4. Chọn **compare:** nhánh vừa push, ví dụ `feature/quan-ly-san-pham`.
+5. Đặt tiêu đề ngắn gọn và ghi rõ nội dung đã thay đổi trong phần mô tả.
+6. Kiểm tra lại danh sách tập tin trong thẻ **Files changed**.
+7. Chọn **Create pull request**.
+8. Chờ chủ sở hữu mã nguồn `@Me3paw` kiểm tra và chấp thuận.
+9. Chỉ merge Pull Request vào `main` sau khi đã xử lý các yêu cầu sửa đổi.
+10. Sau khi merge thành công, có thể xóa nhánh trên GitHub.
+
+### Cập nhật máy cá nhân sau khi merge
+
+```bash
+git switch main
+git pull origin main
+git branch -d feature/ten-tinh-nang
+```
+
+Lệnh cuối chỉ xóa nhánh ở máy cá nhân sau khi nhánh đã được merge.
 
 ## Xử lý lỗi thường gặp
 
