@@ -11,15 +11,12 @@ public final class DBConnection {
     }
 
     public static int smoke() {
-        String url = required("POS_DB_URL");
-        String user = required("POS_DB_USER");
-        String password = required("POS_DB_PASSWORD");
-        if (url == null || user == null || password == null) {
+        if (!configured()) {
             return 2;
         }
 
         DriverManager.setLoginTimeout(5);
-        try (Connection connection = DriverManager.getConnection(url, user, password);
+        try (Connection connection = open();
              Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("SELECT 1")) {
             if (result.next() && result.getInt(1) == 1) {
@@ -29,6 +26,20 @@ public final class DBConnection {
         } catch (SQLException exception) {
             return 4;
         }
+    }
+
+    public static Connection open() throws SQLException {
+        String url = required("POS_DB_URL");
+        String user = required("POS_DB_USER");
+        String password = required("POS_DB_PASSWORD");
+        if (url == null || user == null || password == null) {
+            throw new SQLException("Thiếu cấu hình kết nối cơ sở dữ liệu");
+        }
+        return DriverManager.getConnection(url, user, password);
+    }
+
+    public static boolean configured() {
+        return required("POS_DB_URL") != null && required("POS_DB_USER") != null && required("POS_DB_PASSWORD") != null;
     }
 
     private static String required(String name) {

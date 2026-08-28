@@ -1,6 +1,7 @@
 package graphicUI;
 
 import components.UiTheme;
+import components.DialogActions;
 import entity.NhanVien;
 import entity.TaiKhoan;
 import java.awt.BorderLayout;
@@ -27,6 +28,7 @@ import javax.swing.table.DefaultTableModel;
 import service.Actor;
 import service.MasterDataService;
 
+@SuppressWarnings("serial")
 public final class StaffPanel extends JPanel {
     private final Actor actor;
     private final JTextField key = new JTextField(14);
@@ -66,7 +68,12 @@ public final class StaffPanel extends JPanel {
         addButton(buttons, "Tìm", new Runnable() { @Override public void run() { load(); } });
         addButton(buttons, "Chi tiết", new Runnable() { @Override public void run() { detail(); } });
         addButton(buttons, "Thêm / sửa nhân viên", new Runnable() { @Override public void run() { editEmployee(); } });
-        addButton(buttons, "Tạo / đặt lại tài khoản", new Runnable() { @Override public void run() { editAccount(); } });
+        addButton(buttons, "Tạo / đặt lại tài khoản", new Runnable() {
+            @Override
+            public void run() {
+                editAccount();
+            }
+        });
         addButton(buttons, "Đổi trạng thái", new Runnable() { @Override public void run() { changeState(); } });
         addButton(buttons, "Xóa dòng chọn", new Runnable() { @Override public void run() { remove(); } });
         add(buttons, BorderLayout.NORTH);
@@ -196,8 +203,7 @@ public final class StaffPanel extends JPanel {
         addField(form, "Họ tên", name);
         addField(form, "Điện thoại", phone);
         addField(form, "Chức vụ", title);
-        if (JOptionPane.showConfirmDialog(this, form, existing == null ? "Thêm nhân viên" : "Sửa nhân viên",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) return;
+        if (!DialogActions.confirm(this, form, existing == null ? "Thêm nhân viên" : "Sửa nhân viên")) return;
 
         final String employeeId = id.getText().trim();
         final String employeeName = name.getText().trim();
@@ -246,12 +252,11 @@ public final class StaffPanel extends JPanel {
         addField(form, "Mã nhân viên", employee);
         addField(form, "Vai trò", role);
         addField(form, existing == null ? "Mật khẩu" : "Mật khẩu mới", password);
-        int choice = JOptionPane.showConfirmDialog(this, form,
-                existing == null ? "Tạo tài khoản" : "Đặt lại tài khoản", JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.PLAIN_MESSAGE);
+        boolean saved = DialogActions.confirm(this, form,
+                existing == null ? "Tạo tài khoản" : "Đặt lại tài khoản");
         final char[] secret = password.getPassword();
         password.setText("");
-        if (choice != JOptionPane.OK_OPTION) {
+        if (!saved) {
             Arrays.fill(secret, '\0');
             return;
         }

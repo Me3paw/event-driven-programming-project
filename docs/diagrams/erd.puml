@@ -1,0 +1,214 @@
+@startuml
+title ERD - Cua hang tien loi (MariaDB, 17 bang)
+hide circle
+skinparam linetype ortho
+skinparam shadowing false
+
+entity "NHAN_VIEN" as nv {
+  * ma_nhan_vien : VARCHAR(20) <<PK>>
+  --
+  ho_ten : VARCHAR(100)
+  so_dien_thoai : VARCHAR(20)
+  chuc_vu : VARCHAR(30)
+  trang_thai : VARCHAR(20)
+}
+entity "TAI_KHOAN" as tk {
+  * ten_dang_nhap : VARCHAR(50) <<PK>>
+  --
+  mat_khau_bam : VARCHAR(255)
+  vai_tro : VARCHAR(20)
+  trang_thai : VARCHAR(20)
+  ma_nhan_vien : VARCHAR(20) <<FK, UQ>>
+}
+entity "LOAI_SAN_PHAM" as lsp {
+  * ma_loai : VARCHAR(20) <<PK>>
+  --
+  ten_loai : VARCHAR(100) <<UQ>>
+  mo_ta : VARCHAR(255)
+  trang_thai : VARCHAR(20)
+}
+entity "SAN_PHAM" as sp {
+  * ma_san_pham : VARCHAR(20) <<PK>>
+  --
+  ma_loai : VARCHAR(20) <<FK>>
+  ten_san_pham : VARCHAR(150)
+  don_vi_tinh : VARCHAR(30)
+  gia_ban : DECIMAL(15,0)
+  nguong_ton : INT
+  trang_thai : VARCHAR(20)
+}
+entity "KHACH_HANG" as kh {
+  * ma_khach_hang : VARCHAR(20) <<PK>>
+  --
+  ho_ten : VARCHAR(100)
+  so_dien_thoai : VARCHAR(20) <<UQ>>
+  diem_hien_co : BIGINT
+  diem_tich_luy : BIGINT
+  / tong_chi_tieu : DECIMAL(15,0) <<derived>>
+  / hang_thanh_vien : VARCHAR(20) <<derived>>
+  trang_thai : VARCHAR(20)
+}
+entity "NHA_CUNG_CAP" as ncc {
+  * ma_nha_cung_cap : VARCHAR(20) <<PK>>
+  --
+  ten_nha_cung_cap : VARCHAR(150)
+  so_dien_thoai : VARCHAR(20)
+  dia_chi : VARCHAR(255)
+  trang_thai : VARCHAR(20)
+}
+entity "CAU_HINH_CUA_HANG" as ch {
+  * id : TINYINT <<PK, CHECK id = 1>>
+  --
+  ten_cua_hang : VARCHAR(150)
+  dia_chi : VARCHAR(255)
+  so_dien_thoai : VARCHAR(20)
+  ty_le_vat : DECIMAL(5,2) <<CHECK BETWEEN 0 AND 100>>
+}
+
+entity "PHIEU_NHAP" as pn {
+  * ma_phieu_nhap : VARCHAR(20) <<PK>>
+  --
+  ma_nha_cung_cap : VARCHAR(20) <<FK>>
+  ma_nhan_vien : VARCHAR(20) <<FK>>
+  thoi_diem_lap : DATETIME
+  thoi_diem_hoan_tat : DATETIME <<NULL>>
+  trang_thai : VARCHAR(20)
+  tong_tien : DECIMAL(15,0)
+}
+entity "CHI_TIET_PHIEU_NHAP" as ctpn {
+  * ma_phieu_nhap : VARCHAR(20) <<PK, FK>>
+  * ma_san_pham : VARCHAR(20) <<PK, FK>>
+  --
+  so_luong : INT
+  don_gia_nhap : DECIMAL(15,0)
+}
+entity "LO_TON_KHO" as lot {
+  * ma_lo : BIGINT <<PK>>
+  --
+  ma_phieu_nhap : VARCHAR(20) <<FK(composite), UQ(pair)>>
+  ma_san_pham : VARCHAR(20) <<FK(composite), UQ(pair)>>
+  so_luong_nhap : INT
+  so_luong_con : INT
+  thoi_diem_nhap : DATETIME
+}
+entity "DIEU_CHINH_TON" as dct {
+  * ma_dieu_chinh : VARCHAR(20) <<PK>>
+  --
+  ma_nhan_vien : VARCHAR(20) <<FK>>
+  thoi_diem_lap : DATETIME
+  ly_do : VARCHAR(255)
+}
+entity "CHI_TIET_DIEU_CHINH" as ctdc {
+  * ma_dieu_chinh : VARCHAR(20) <<PK, FK>>
+  * ma_lo : BIGINT <<PK, FK>>
+  --
+  so_luong_giam : INT
+}
+
+entity "HOA_DON" as hd {
+  * ma_hoa_don : VARCHAR(20) <<PK>>
+  --
+  ma_nhan_vien : VARCHAR(20) <<FK>>
+  ma_khach_hang : VARCHAR(20) <<FK, NULL>>
+  ma_khuyen_mai : VARCHAR(20) <<FK, NULL>>
+  ma_nhan_vien_huy : VARCHAR(20) <<FK, NULL>>
+  thoi_diem_lap : DATETIME
+  thoi_diem_huy : DATETIME <<NULL>>
+  phuong_thuc_tt : VARCHAR(20)
+  ma_tham_chieu_tt : VARCHAR(100) <<NULL>>
+  tong_gia_goc : DECIMAL(15,0)
+  loai_giam_gia : VARCHAR(20)
+  ty_le_giam : DECIMAL(5,2) <<CHECK BETWEEN 0 AND 100>>
+  tien_giam : DECIMAL(15,0)
+  diem_su_dung : BIGINT
+  tien_giam_diem : DECIMAL(15,0)
+  diem_tich_luy_kiem : BIGINT
+  diem_thuong_kiem : BIGINT
+  ty_le_vat : DECIMAL(5,2) <<CHECK BETWEEN 0 AND 100>>
+  tien_vat : DECIMAL(15,0)
+  tong_thanh_toan : DECIMAL(15,0)
+  tien_khach_dua : DECIMAL(15,0) <<NULL>>
+  tien_thua : DECIMAL(15,0) <<NULL>>
+  trang_thai : VARCHAR(20)
+  ly_do_huy : VARCHAR(255) <<NULL>>
+}
+entity "CHI_TIET_HOA_DON" as cthd {
+  * ma_hoa_don : VARCHAR(20) <<PK, FK>>
+  * ma_san_pham : VARCHAR(20) <<PK, FK>>
+  --
+  so_luong : INT
+  don_gia_ban : DECIMAL(15,0)
+  tien_giam_dong : DECIMAL(15,0) <<IMMUTABLE>>
+  thanh_tien : DECIMAL(15,0)
+}
+entity "PHAN_BO_XUAT_LO" as pbxl {
+  * ma_hoa_don : VARCHAR(20) <<PK, FK>>
+  * ma_san_pham : VARCHAR(20) <<PK, FK>>
+  * ma_lo : BIGINT <<PK, FK>>
+  --
+  so_luong_xuat : INT
+  don_gia_von : DECIMAL(15,0)
+}
+
+entity "KHUYEN_MAI" as km {
+  * ma_khuyen_mai : VARCHAR(20) <<PK>>
+  --
+  ten_khuyen_mai : VARCHAR(150)
+  pham_vi : VARCHAR(20)
+  ty_le_giam : DECIMAL(5,2) <<CHECK > 0 AND <= 100>>
+  bat_dau : DATETIME
+  ket_thuc : DATETIME
+  trang_thai : VARCHAR(20)
+}
+entity "KHUYEN_MAI_SAN_PHAM" as kmsp {
+  * ma_khuyen_mai : VARCHAR(20) <<PK, FK>>
+  * ma_san_pham : VARCHAR(20) <<PK, FK>>
+}
+
+nv ||--o| tk
+lsp ||--o{ sp
+ncc ||--o{ pn
+nv ||--o{ pn
+pn ||--|{ ctpn
+sp ||--o{ ctpn
+ctpn ||--o| lot : tao mot lo khi hoan tat
+nv ||--o{ dct
+dct ||--|{ ctdc
+lot ||--o{ ctdc
+nv ||--o{ hd : lap
+nv o|--o{ hd : duyet huy
+kh o|--o{ hd
+km o|--o{ hd : ap dung tuy chon
+hd ||--|{ cthd
+sp ||--o{ cthd
+cthd ||--|{ pbxl
+lot ||--o{ pbxl
+km ||--o{ kmsp
+sp ||--o{ kmsp
+
+note right of ch
+Singleton: chi co id = 1.
+VAT mac dinh chi ap dung
+cho giao dich tuong lai.
+end note
+
+note bottom of hd
+Gia tri VAT, giam gia va diem duoc chot khi thanh toan.
+Hoa don thanh toan khong sua/xoa truc tiep; huy hoa don
+hoan dung PHAN_BO_XUAT_LO va chi hoan diem da su dung.
+diem_tich_luy_kiem = tong_gia_goc (VND);
+diem_thuong_kiem = floor(5% * tong_gia_goc), khong bang nhau.
+end note
+
+note right of hd
+CASH: tien_khach_dua >= tong_thanh_toan;
+tien_thua = tien_khach_dua - tong_thanh_toan.
+CARD/QR: hai truong tien mat NULL;
+thanh toan thanh cong phai co ma_tham_chieu_tt.
+end note
+
+note bottom of lot
+Ton hien tai = SUM(so_luong_con).
+Ban hang va dieu chinh giam xuat lo cu nhat (FIFO).
+end note
+@enduml

@@ -1,0 +1,77 @@
+@startuml
+title Use case - Quan ly ban hang cua hang tien loi
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+actor "Thu ngan" as Cashier
+actor "Quan ly" as Manager
+
+rectangle "He thong noi bo cua hang tien loi" {
+  usecase "Dang nhap" as UCLogin
+  usecase "Quan ly nhan vien\nva tai khoan" as UCStaff
+  usecase "Xem hang hoa\n(loai, san pham)" as UCViewProduct
+  usecase "Quan ly hang hoa\n(loai, san pham)" as UCProduct
+  usecase "Quan ly khach hang\nva lich su mua" as UCCustomer
+  usecase "Quan ly nha cung cap" as UCSupplier
+  usecase "Lap phieu nhap" as UCPurchase
+  usecase "Hoan tat phieu nhap\nva tao lo FIFO" as UCFinishPurchase
+  usecase "Xem ton kho" as UCStock
+  usecase "Dieu chinh giam ton\nco ly do" as UCAdjust
+  usecase "Quan ly khuyen mai" as UCPromotion
+  usecase "Lap hoa don ban" as UCSale
+  usecase "Chon khach hang\nhoac khach le" as UCChooseCustomer
+  usecase "Tinh giam gia, diem\nva VAT" as UCCalculate
+  usecase "Thanh toan\n(tien mat/the/QR mock)" as UCPay
+  usecase "Xem truoc va in hoa don" as UCPrint
+  usecase "Tra cuu hoa don" as UCInvoiceLookup
+  usecase "Huy hoa don\nva hoan ton FIFO" as UCCancel
+  usecase "Xem bao cao co ban" as UCReport
+  usecase "Cau hinh VAT mac dinh" as UCSettings
+}
+
+Cashier --> UCLogin
+Cashier --> UCViewProduct
+Cashier --> UCCustomer
+Cashier --> UCStock
+Cashier --> UCSale
+Cashier --> UCInvoiceLookup
+Cashier --> UCPrint
+
+Manager --> UCLogin
+Manager --> UCStaff
+Manager --> UCProduct
+Manager --> UCViewProduct
+Manager --> UCCustomer
+Manager --> UCSupplier
+Manager --> UCPurchase
+Manager --> UCFinishPurchase
+Manager --> UCStock
+Manager --> UCAdjust
+Manager --> UCPromotion
+Manager --> UCSale
+Manager --> UCPrint
+Manager --> UCInvoiceLookup
+Manager --> UCCancel
+Manager --> UCReport
+Manager --> UCSettings
+
+UCSale .> UCChooseCustomer : <<include>>
+UCSale .> UCCalculate : <<include>>
+UCSale .> UCPay : <<include>>
+UCPrint .> UCPay : <<extend>>
+UCFinishPurchase .> UCPurchase : <<extend>>
+UCCancel .> UCInvoiceLookup : <<include>>
+
+note bottom of UCCalculate
+Chi mot: giam theo hang HOAC
+mot khuyen mai; sau do tru diem,
+roi tinh VAT.
+end note
+
+note bottom of UCCancel
+Can quan ly xac thuc va co ly do.
+Hoan dung lo da xuat; hoan diem da dung,
+giu diem da kiem.
+end note
+@enduml

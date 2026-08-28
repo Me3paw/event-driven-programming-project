@@ -1,234 +1,230 @@
-# POS Nature CRUD
+# Quản lý bán hàng tại cửa hàng tiện lợi
 
-Đây là bài tập Java Swing cơ bản mô phỏng giao diện quản lý bán hàng. Dự án được tạo dưới dạng **Eclipse Java Project thông thường**, không sử dụng Maven hoặc Gradle. Thư viện MariaDB được quản lý thủ công trong thư mục `lib`.
+Bài tập lớn LTHSK Java năm học 2025–2026. Chương trình được xây dựng cho nhân viên cửa hàng tiện lợi.
 
-## Yêu cầu môi trường
+Dự án dùng Java 8, Java Swing và mô hình ba lớp. Cơ sở dữ liệu chính thức của dự án là MariaDB theo chấp thuận của giảng viên, thay cho SQL Server trong đề bài gốc.
 
-Mọi thành viên sử dụng cùng cấu hình sau:
+## Chức năng của đề tài
 
-- Eclipse IDE có hỗ trợ Java.
-- JDK 8 được cấu hình trong Eclipse với tên môi trường `JavaSE-1.8`.
-- MariaDB Java Client `3.5.7` đã có sẵn tại `lib/mariadb-java-client-3.5.7.jar`.
-- Mã nguồn dùng UTF-8.
+- Đăng nhập và phân quyền quản lý, nhân viên bán hàng.
+- Quản lý nhân viên, loại sản phẩm, sản phẩm và khách hàng.
+- Thêm, sửa, xóa, xem danh sách và xem chi tiết dữ liệu.
+- Tìm kiếm đơn giản theo từ khóa và tìm kiếm nâng cao theo nhiều điều kiện.
+- Lập hóa đơn, kiểm tra tồn kho, nhận tiền và tính tiền thừa.
+- Xem, tìm kiếm, hủy và in hóa đơn.
+- Thống kê doanh thu, số hóa đơn, sản phẩm bán chạy và sản phẩm sắp hết.
+- Phím tắt: `F2` mở POS, `Ctrl+F` đặt focus ô tìm kiếm, `Ctrl+S` lưu dialog chỉnh sửa đang mở, `Esc` đóng dialog; hỗ trợ chuyển ô nhập liệu bằng phím Tab.
 
-Không cần cài Maven hoặc Gradle để mở và chạy dự án.
+Khi lưu hóa đơn, chương trình phải lưu chi tiết hóa đơn và trừ tồn kho cùng lúc. Nếu có lỗi thì toàn bộ thao tác phải được hủy để dữ liệu không bị sai.
 
-## Cấu trúc thư mục
+Đề tài có chức năng nhập hàng, nhà cung cấp, khuyến mãi, tích điểm, thanh toán điện tử mô phỏng, thống kê hàng hóa/thu chi, CRM nội bộ và tính thuế trên đơn hàng. Chương trình không có bán hàng trực tuyến hoặc ứng dụng cho người mua.
+
+## Công nghệ sử dụng
+
+- Eclipse Java Project thông thường, không dùng Maven hoặc Gradle.
+- Java 8 và Java Swing.
+- MariaDB.
+- MariaDB Connector/J `3.5.7` tại `lib/mariadb-java-client-3.5.7.jar`.
+- Mã nguồn và dữ liệu tiếng Việt dùng UTF-8.
+
+## Cấu trúc mã nguồn hiện tại
 
 ```text
-.
-├── .github/
-│   └── CODEOWNERS          Chủ sở hữu mã nguồn trên GitHub
-├── .settings/             Cấu hình Java 8 và UTF-8 của Eclipse
-├── lib/                   Thư viện JAR được thêm thủ công
-├── sql/                   Tập tin SQL của dự án
-├── src/
-│   ├── components/        Thành phần giao diện dùng chung
-│   ├── connectDB/         Kết nối và kiểm tra MariaDB
-│   ├── dao/               Lớp truy cập dữ liệu
-│   ├── entity/            Lớp biểu diễn dữ liệu
-│   └── graphicUI/         Màn hình và lớp chạy chương trình
-├── .classpath             Đường dẫn mã nguồn, JRE và thư viện
-├── .project               Thông tin Eclipse Project
-└── README.md
+src/
+├── components/
+├── connectDB/
+│   └── DBConnection.java
+├── dao/
+├── entity/
+├── service/
+├── testsupport/
+└── graphicUI/
+    ├── PosApplication.java
+    └── PosFrame.java
 ```
 
-Hiện tại `dao`, `entity` và `sql/Script.sql` chưa có chức năng nghiệp vụ vì đề bài chính thức chưa quy định cấu trúc cơ sở dữ liệu.
+- `graphicUI` chứa đăng nhập, điều hướng và các màn hình nghiệp vụ Swing.
+- `service` kiểm tra quyền theo `Actor`, điều phối transaction và gọi DAO.
+- `dao` chỉ truy cập JDBC; `entity` chứa dữ liệu; `connectDB` đọc cấu hình kết nối.
+- `testsupport` chứa smoke backend và kiểm thử transaction/concurrency tự dọn fixture.
 
-## Nhập dự án vào Eclipse
+## Trạng thái hiện tại
 
-1. Mở Eclipse.
-2. Chọn **File > Import...**.
-3. Trong cửa sổ Import, mở nhóm **General**.
-4. Chọn **Existing Projects into Workspace**, sau đó bấm **Next**.
-5. Chọn **Select root directory**.
-6. Bấm **Browse...** và chọn đúng thư mục gốc của dự án, tức thư mục chứa `.project`, `.classpath`, `src` và `lib`.
-7. Khi tên dự án `POS-Nature-CRUD` xuất hiện trong danh sách Projects, đánh dấu chọn dự án đó.
-8. Không cần chọn **Copy projects into workspace** nếu đang mở trực tiếp thư mục đã tải hoặc đã clone.
-9. Bấm **Finish**.
-10. Chờ Eclipse hoàn tất quá trình build. Trong Project Explorer không được còn dấu X màu đỏ ở tên dự án.
+Dự án hiện có schema MariaDB 17 bảng, đăng nhập/phân quyền, danh mục/khách hàng/nhà cung cấp/nhân sự, nhập hàng-lô FIFO, điều chỉnh tồn, bán hàng-hủy/in hóa đơn, khuyến mãi/điểm/VAT, CRM và báo cáo typed. Service kiểm tra quyền ngoài giao diện; checkout có transaction và retry hữu hạn khi MariaDB báo lỗi tranh chấp tạm thời.
 
-## Kiểm tra Java 8
+Các màn hình Swing hiện là phần hiện thực đang kiểm thử; ảnh và mô tả Phần 4 vẫn cần chuẩn bị khi nộp.
 
-Sau khi import, trong Project Explorer phải thấy **JRE System Library [JavaSE-1.8]**.
+## Chuẩn bị trên Linux
 
-Nếu Eclipse báo thiếu JRE:
+Máy cần có Docker. Bộ công cụ cục bộ không thay đổi Java đang dùng của hệ thống.
 
-1. Chọn **Window > Preferences > Java > Installed JREs**.
-2. Bấm **Add... > Standard VM > Next**.
-3. Tại **JRE home**, chọn thư mục cài đặt JDK 8.
-4. Đặt tên dễ nhận biết, ví dụ `JDK 8`.
-5. Bấm **Finish**, đánh dấu JDK 8 vừa thêm, sau đó bấm **Apply and Close**.
-6. Nhấp phải dự án, chọn **Properties > Java Build Path > Libraries**.
-7. Nếu JRE hiện tại không phải Java 8, xóa mục đó và chọn **Add Library... > JRE System Library > Execution environment > JavaSE-1.8**.
-8. Bấm **Apply and Close**.
+Tại thư mục gốc của dự án, chạy:
 
-## Kiểm tra thư viện MariaDB
+```bash
+./dev setup
+./dev smoke
+./dev backend-test
+./dev eclipse
+```
 
-Trong Project Explorer phải thấy `lib/mariadb-java-client-3.5.7.jar` và thư viện này phải xuất hiện trong **Referenced Libraries**.
+- `setup` tải Java 8, Eclipse và MariaDB cần cho dự án.
+- `smoke` chỉ biên dịch và kiểm tra kết nối database bằng `SELECT 1`.
+- `backend-test` chạy smoke quyền, kiểm thử transaction/FIFO/làm tròn/concurrency và tự dọn fixture tạm.
+- `eclipse` mở Eclipse với workspace riêng của dự án.
 
-Nếu Eclipse báo thiếu thư viện:
+Khi không còn làm dự án, có thể xóa môi trường cục bộ bằng:
 
-1. Nhấp phải dự án và chọn **Properties**.
-2. Chọn **Java Build Path > Libraries**.
-3. Chọn **Classpath**, sau đó bấm **Add JARs...**.
-4. Chọn `lib/mariadb-java-client-3.5.7.jar` trong dự án.
-5. Bấm **Apply and Close**.
-6. Chọn **Project > Clean...**, chọn dự án và bấm **Clean**.
+```bash
+./dev wipe
+```
 
-## Chạy giao diện
+Lệnh này xóa Java 8, Eclipse, file biên dịch và dữ liệu MariaDB của riêng dự án. Image MariaDB dùng chung của Docker vẫn được giữ lại.
+
+## Chuẩn bị Eclipse trên Windows
+
+Tập tin `dev` chỉ dùng cho Linux. Trên Windows, cài và cấu hình thủ công như sau:
+
+1. Cài JDK 8. Có thể dùng Eclipse Temurin 8 từ trang [Adoptium](https://adoptium.net/temurin/releases/?version=8).
+2. Tải bản **Eclipse IDE for Java Developers** từ trang [Eclipse Packages](https://www.eclipse.org/downloads/packages/).
+3. Mở Eclipse, chọn **Window > Preferences > Java > Installed JREs**.
+4. Chọn **Add... > Standard VM**, rồi chọn thư mục JDK 8 vừa cài.
+5. Đặt tên JDK là `Temurin 8` hoặc `JDK 8`, sau đó đánh dấu JDK này làm mặc định.
+6. Trong **Java > Installed JREs > Execution Environments**, gán JDK 8 cho `JavaSE-1.8`.
+7. Đặt mã hóa workspace tại **General > Workspace > Text file encoding > UTF-8**.
+8. Import dự án theo hướng dẫn ở phần tiếp theo.
+
+Trên Windows, có thể chạy MariaDB bằng Docker Desktop hoặc cài MariaDB trực tiếp. Các thành viên phải dùng cùng cấu trúc database trong `sql/Script.sql`.
+
+## Import dự án vào Eclipse
+
+1. Chọn **File > Import...**.
+2. Mở nhóm **General** và chọn **Existing Projects into Workspace**.
+3. Chọn **Select root directory**.
+4. Chọn thư mục chứa `.project`, `.classpath`, `src` và `lib`.
+5. Đánh dấu dự án `POS-Cua-Hang-Tien-Loi`.
+6. Không chọn **Copy projects into workspace** nếu đang mở trực tiếp thư mục đã clone.
+7. Chọn **Finish** và chờ Eclipse build xong.
+
+Trong Project Explorer cần thấy:
+
+- `JRE System Library [JavaSE-1.8]`.
+- `mariadb-java-client-3.5.7.jar` trong **Referenced Libraries**.
+
+Nếu thiếu JAR MariaDB, nhấp phải dự án, chọn **Properties > Java Build Path > Libraries > Classpath > Add JARs...**, rồi chọn file JAR trong thư mục `lib`.
+
+## Chạy chương trình
 
 1. Mở `src/graphicUI/PosApplication.java`.
-2. Nhấp phải trong vùng mã nguồn.
-3. Chọn **Run As > Java Application**.
-4. Cửa sổ `POS Nature` sẽ xuất hiện.
+2. Nhấp phải trong file và chọn **Run As > Java Application**.
+3. Cửa sổ `POS Cửa Hàng Tiện Lợi` sẽ xuất hiện.
 
-Giao diện hiện có bốn mục:
+Trên Linux cũng có thể chạy từ terminal:
 
-- **Dashboard**: tổng quan dữ liệu mẫu.
-- **Products**: danh sách và ô nhập sản phẩm mẫu.
-- **Customers**: danh sách và ô nhập khách hàng mẫu.
-- **Sales**: danh sách và ô nhập giao dịch mẫu.
+```bash
+./dev run
+```
 
-Dữ liệu hiện tại chỉ nằm trong bộ nhớ. Các nút nhập liệu chỉ minh họa thao tác giao diện và không lưu xuống cơ sở dữ liệu.
+## MariaDB dùng cho dự án
 
-## Cấu hình kiểm tra MariaDB
+Trên Linux, khởi động database bằng:
 
-Giao diện có thể chạy mà không cần cơ sở dữ liệu. Chỉ thực hiện phần này khi cần kiểm tra kết nối MariaDB.
+```bash
+./dev db-up
+```
 
-1. Chọn **Run > Run Configurations...**.
-2. Mở **Java Application** và chọn cấu hình chạy `PosApplication`.
-3. Tại thẻ **Arguments**, nhập `--db-smoke` vào ô **Program arguments**.
-4. Mở thẻ **Environment** và thêm ba biến:
-
-   - `POS_DB_URL`: ví dụ `jdbc:mariadb://127.0.0.1:3306/ten_co_so_du_lieu`
-   - `POS_DB_USER`: tên tài khoản MariaDB
-   - `POS_DB_PASSWORD`: mật khẩu MariaDB
-
-5. Bấm **Run**.
-
-Chương trình trả mã `0` khi câu lệnh kiểm tra `SELECT 1` thành công. Mã `2` cho biết thiếu biến môi trường, mã `3` là kết quả không hợp lệ và mã `4` là lỗi kết nối JDBC.
-
-Sau khi kiểm tra, xóa `--db-smoke` khỏi Program arguments để chạy lại giao diện bình thường.
-
-## Quy trình làm việc với Git và GitHub
-
-Không làm tính năng mới trực tiếp trên nhánh `main`. Mỗi tính năng hoặc thay đổi phải có một nhánh riêng, sau đó tạo Pull Request để được kiểm tra và hợp nhất vào `main`.
-
-### Quy tắc đặt tên nhánh
-
-Tên nhánh dùng chữ thường, không dấu, không khoảng trắng và nối các từ bằng dấu gạch ngang.
+Cấu hình cục bộ mặc định:
 
 ```text
-feature/ten-tinh-nang
-fix/ten-loi
-docs/noi-dung-tai-lieu
+Địa chỉ: 127.0.0.1
+Cổng: 3307
+Database: cua_hang_tien_loi
+Tài khoản: cua_hang_app
+Mật khẩu: cua_hang_dev
 ```
+
+Tài khoản dữ liệu mẫu chỉ dành cho môi trường phát triển:
+
+```text
+Quản lý: quanly / MatKhau123
+Thu ngân: thungan / MatKhau123
+```
+
+`compose.yaml` tạo MariaDB với database `cua_hang_tien_loi`; ứng dụng chỉ nhận đúng ba biến `POS_DB_URL`, `POS_DB_USER` và `POS_DB_PASSWORD`. `./dev wipe` xóa volume của dự án, nên lần `./dev db-up` hoặc `./dev smoke` tiếp theo sẽ nạp lại `sql/Script.sql`.
+
+Để kiểm tra kết nối trong Eclipse, mở **Run > Run Configurations...**, chọn cấu hình `PosApplication` và thêm:
+
+- Program argument: `--db-smoke`
+- `POS_DB_URL`: `jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi`
+- `POS_DB_USER`: `cua_hang_app`
+- `POS_DB_PASSWORD`: `cua_hang_dev`
+
+Các thông tin trên chỉ dùng để phát triển cục bộ. Không đưa mật khẩu hoặc thông tin kết nối thật vào Git.
+
+## Nếu muốn dùng SQL Server
+
+Phần này chỉ dành cho người muốn tự chạy thử dự án với SQL Server. Dự án chính và `sql/Script.sql` vẫn dùng MariaDB.
+
+Không thể chỉ đổi địa chỉ kết nối vì MariaDB và SQL Server có khác biệt về driver, kiểu dữ liệu và câu lệnh tạo bảng. Muốn dùng SQL Server cần:
+
+1. Tải [Microsoft JDBC Driver for SQL Server](https://learn.microsoft.com/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server) và lấy file JAR dành cho Java 8, có tên kết thúc bằng `.jre8.jar`.
+2. Đặt file JAR trong `lib` và thêm nó vào **Java Build Path** của Eclipse.
+3. Dùng URL kết nối SQL Server, ví dụ:
+
+   ```text
+   jdbc:sqlserver://localhost:1433;databaseName=cua_hang_tien_loi;encrypt=true;trustServerCertificate=true
+   ```
+
+4. Tạo một bản script riêng theo cú pháp SQL Server. Không ghi đè `sql/Script.sql` của MariaDB.
+5. Giữ nguyên ba biến `POS_DB_URL`, `POS_DB_USER` và `POS_DB_PASSWORD` khi tạo Run Configuration.
+
+`trustServerCertificate=true` chỉ phù hợp khi thử trên máy cá nhân với chứng chỉ tự ký. Không dùng tùy chọn này cho máy chủ thật.
+
+`DBConnection.java` hiện đọc URL, tài khoản và mật khẩu từ biến môi trường, nên không cần sửa. Tuy nhiên, các lớp `dao` có câu lệnh riêng của MariaDB vẫn có thể cần điều chỉnh khi chạy với SQL Server.
+
+## Tài liệu cần nộp
+
+1. Thu thập và phân tích yêu cầu.
+2. Sơ đồ lớp và mô tả các ràng buộc.
+3. Sơ đồ cơ sở dữ liệu và mô tả các ràng buộc.
+4. Ảnh và mô tả các màn hình chính của chương trình.
+
+Tài liệu phải ghi rõ MariaDB được dùng thay SQL Server theo chấp thuận của giảng viên.
+
+Đặc tả chi tiết Phần 1–3 nằm tại [docs/DAC_TA_HE_THONG.md](docs/DAC_TA_HE_THONG.md).
+
+## Làm việc với GitHub
+
+- Không làm tính năng trực tiếp trên nhánh `main`.
+- Dùng nhánh `feature/`, `fix/` hoặc `docs/` phù hợp với thay đổi.
+- Commit ngắn gọn và đúng nội dung.
+- Push nhánh lên GitHub, tạo Pull Request và chờ kiểm tra trước khi merge.
 
 Ví dụ:
 
-```text
-feature/quan-ly-san-pham
-fix/loi-ket-noi-database
-docs/cap-nhat-huong-dan-eclipse
-```
-
-Sử dụng `feature/` cho tính năng mới, `fix/` cho sửa lỗi và `docs/` cho thay đổi tài liệu.
-
-### Tạo nhánh mới
-
-Trước khi bắt đầu, chuyển về `main` và lấy phiên bản mới nhất:
-
 ```bash
 git switch main
 git pull origin main
+git switch -c feature/quan-ly-san-pham
 ```
 
-Tạo nhánh mới từ `main`:
-
-```bash
-git switch -c feature/ten-tinh-nang
-```
-
-Thay `feature/ten-tinh-nang` bằng tên phù hợp với công việc đang thực hiện.
-
-### Lưu thay đổi bằng commit
-
-Kiểm tra các tập tin đã thay đổi:
-
-```bash
-git status
-```
-
-Thêm các tập tin cần lưu và tạo commit:
-
-```bash
-git add .
-git commit -m "feat: them chuc nang quan ly san pham"
-```
-
-Nội dung commit cần ngắn gọn và mô tả đúng thay đổi. Có thể dùng tiền tố `feat:`, `fix:` hoặc `docs:` tương ứng với loại công việc.
-
-### Đẩy nhánh lên GitHub
-
-Lần đầu đẩy một nhánh mới:
-
-```bash
-git push -u origin feature/ten-tinh-nang
-```
-
-Những lần tiếp theo trên cùng nhánh chỉ cần:
-
-```bash
-git push
-```
-
-Không dùng `git push origin main` cho công việc phát triển tính năng.
-
-### Tạo Pull Request
-
-1. Mở repository trên GitHub sau khi đã push nhánh.
-2. Chọn **Compare & pull request**. Nếu nút này không xuất hiện, mở thẻ **Pull requests** và chọn **New pull request**.
-3. Chọn **base: main**.
-4. Chọn **compare:** nhánh vừa push, ví dụ `feature/quan-ly-san-pham`.
-5. Đặt tiêu đề ngắn gọn và ghi rõ nội dung đã thay đổi trong phần mô tả.
-6. Kiểm tra lại danh sách tập tin trong thẻ **Files changed**.
-7. Chọn **Create pull request**.
-8. Chờ chủ sở hữu mã nguồn `@Me3paw` kiểm tra và chấp thuận.
-9. Chỉ merge Pull Request vào `main` sau khi đã xử lý các yêu cầu sửa đổi.
-10. Sau khi merge thành công, có thể xóa nhánh trên GitHub.
-
-### Cập nhật máy cá nhân sau khi merge
-
-```bash
-git switch main
-git pull origin main
-git branch -d feature/ten-tinh-nang
-```
-
-Lệnh cuối chỉ xóa nhánh ở máy cá nhân sau khi nhánh đã được merge.
-
-## Xử lý lỗi thường gặp
+## Lỗi thường gặp
 
 ### Eclipse không nhận dự án
 
-Kiểm tra lại thư mục được chọn có chứa `.project` và `.classpath`. Không chọn nhầm thư mục `src`.
+Kiểm tra thư mục được chọn có chứa `.project` và `.classpath`. Không chọn thư mục `src` làm thư mục gốc.
 
 ### Có dấu X đỏ sau khi import
 
-1. Chọn **Project > Clean...**.
-2. Nhấp phải dự án và chọn **Refresh**.
-3. Kiểm tra lại JRE phải là `JavaSE-1.8`.
-4. Kiểm tra lại JAR MariaDB trong Java Build Path.
+Chọn **Project > Clean...**, sau đó kiểm tra lại Java 8 và file JAR trong **Java Build Path**.
 
-### Không tìm thấy lớp `graphicUI.PosApplication`
+### Không tìm thấy `graphicUI.PosApplication`
 
-Kiểm tra `src` đã được Eclipse nhận là Source Folder. Nếu chưa, nhấp phải `src` và chọn **Build Path > Use as Source Folder**.
+Nhấp phải thư mục `src` và chọn **Build Path > Use as Source Folder**.
 
-### Chữ tiếng Việt hiển thị sai
+### Chữ tiếng Việt bị lỗi
 
-Nhấp phải dự án, chọn **Properties > Resource**, đặt **Text file encoding** thành `UTF-8`, sau đó bấm **Apply and Close**.
+Nhấp phải dự án, chọn **Properties > Resource**, rồi đặt **Text file encoding** thành `UTF-8`.
 
-### Không kết nối được MariaDB
+### Không kết nối được database
 
-Kiểm tra MariaDB đang chạy, tên cơ sở dữ liệu đúng, cổng kết nối đúng và ba biến môi trường đã được nhập chính xác trong Run Configuration.
+Kiểm tra database đang chạy, cổng kết nối, tên database, tài khoản, mật khẩu và driver JDBC trong **Java Build Path**.

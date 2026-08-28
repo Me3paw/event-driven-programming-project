@@ -1,0 +1,23 @@
+name: pos-cua-hang-tien-loi
+
+services:
+  db:
+    image: mariadb:11.8
+    environment:
+      MARIADB_DATABASE: cua_hang_tien_loi
+      MARIADB_USER: cua_hang_app
+      MARIADB_PASSWORD: cua_hang_dev
+      MARIADB_ROOT_PASSWORD: cua_hang_root_dev
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - pos-data:/var/lib/mysql
+      - ./sql/Script.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  pos-data:
