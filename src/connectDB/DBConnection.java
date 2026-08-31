@@ -23,9 +23,10 @@ public final class DBConnection {
                 return 0;
             }
             return 3;
-        } catch (SQLException exception) {
-            return 4;
-        }
+    } catch (SQLException exception) {
+        exception.printStackTrace();
+        return 4;
+    }
     }
 
     public static Connection open() throws SQLException {
