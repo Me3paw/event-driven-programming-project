@@ -1,9 +1,12 @@
 package graphicUI;
 
+import components.UiFormat;
 import components.UiTheme;
 import components.DialogActions;
-import entity.DieuChinhTon;
+import components.FormValidator;
+import entity.PhieuDieuChinhTon;
 import entity.LoTonKho;
+import entity.SanPham;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -16,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -28,6 +32,7 @@ import javax.swing.SwingWorker;
 import javax.swing.table.DefaultTableModel;
 import service.Actor;
 import service.InventoryService;
+import service.MasterDataService;
 import service.LowStockProduct;
 import service.ReportService;
 
@@ -60,6 +65,7 @@ public final class InventoryPanel extends JPanel {
         super(new BorderLayout(0, 8));
         this.actor = actor;
         this.history = history;
+        stockTable.getColumnModel().getColumn(5).setCellRenderer(UiFormat.moneyRenderer());
         setBackground(UiTheme.BACKGROUND);
         if (history)
             adjustmentPage();
@@ -92,7 +98,7 @@ public final class InventoryPanel extends JPanel {
     }
 
     private void adjustmentPage() {
-        JPanel bar = bar("Mã điều chỉnh / lý do");
+        JPanel bar = bar("Mã phiếu điều chỉnh / lý do");
         JButton detail = new JButton("Chi tiết");
         detail.setMnemonic(KeyEvent.VK_C);
         detail.addActionListener(new ActionListener() {
@@ -101,14 +107,16 @@ public final class InventoryPanel extends JPanel {
             }
         });
         bar.add(detail);
-        JButton adjust = new JButton("Điều chỉnh giảm FIFO");
-        adjust.setMnemonic(KeyEvent.VK_D);
-        adjust.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent event) {
-                adjust();
-            }
-        });
-        bar.add(adjust);
+        if (actor.isQuanLy()) {
+            JButton adjust = new JButton("Điều chỉnh giảm FIFO");
+            adjust.setMnemonic(KeyEvent.VK_D);
+            adjust.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent event) {
+                    adjust();
+                }
+            });
+            bar.add(adjust);
+        }
         add(bar, BorderLayout.NORTH);
         add(new JScrollPane(adjustmentTable), BorderLayout.CENTER);
         load();
@@ -158,7 +166,7 @@ public final class InventoryPanel extends JPanel {
                                     lot.getSoLuongNhap(), lot.getSoLuongCon(), lot.getDonGiaVon(),
                                     lot.getThoiDiemNhap()});
                 } catch (Exception exception) {
-                    message("Không tải được tồn kho.");
+                    message("Không tải được tồn kho.", exception);
                 }
             }
         }.execute();
@@ -166,50 +174,87 @@ public final class InventoryPanel extends JPanel {
 
     private void loadHistory() {
         final String keyword = key.getText().trim();
-        new SwingWorker<List<DieuChinhTon>, Void>() {
-            protected List<DieuChinhTon> doInBackground() throws Exception {
-                return new InventoryService().timDieuChinh(actor, keyword);
+        new SwingWorker<List<PhieuDieuChinhTon>, Void>() {
+            protected List<PhieuDieuChinhTon> doInBackground() throws Exception {
+                return new InventoryService().timPhieuDieuChinh(actor, keyword);
             }
             protected void done() {
                 try {
                     adjustmentModel.setRowCount(0);
-                    for (DieuChinhTon value : get())
+                    for (PhieuDieuChinhTon value : get())
                         adjustmentModel.addRow(
                                 new Object[] {value.getMaDieuChinh(), value.getThoiDiemLap(), value.getMaNhanVien(),
                                         value.getLyDo(), Integer.valueOf(value.getSoLuongGiamTheoLo().size())});
                 } catch (Exception exception) {
-                    message("Không tải được lịch sử điều chỉnh.");
+                    message("Không tải được lịch sử điều chỉnh.", exception);
                 }
             }
         }.execute();
     }
 
+    @SuppressWarnings("unchecked")
     private void adjust() {
-        JTextField id = new JTextField("DC" + System.currentTimeMillis());
-        JTextField product = new JTextField();
+        new SwingWorker<Object[], Void>() {
+            @Override
+            protected Object[] doInBackground() throws Exception {
+                return new Object[] {new InventoryService().maDieuChinhTiepTheo(actor),
+                        new MasterDataService().timSanPham(actor, null, null, "DANG_KINH_DOANH", null, null)};
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Object[] result = get();
+                    adjustForm((String) result[0], (List<SanPham>) result[1]);
+                } catch (Exception exception) {
+                    message("Không tạo được mã phiếu điều chỉnh.", exception);
+                }
+            }
+        }.execute();
+    }
+
+    private void adjustForm(String generatedId, List<SanPham> products) {
+        JTextField id = new JTextField(generatedId);
+        id.setEditable(false);
+        JComboBox<String> product = new JComboBox<String>();
+        product.setEditable(true);
+        for (SanPham value : products)
+            product.addItem(UiFormat.joinIdName(value.getMaSanPham(), value.getTenSanPham()));
         JTextField quantity = new JTextField();
         JTextField reason = new JTextField();
-        JPanel form = new JPanel(new GridLayout(0, 1));
-        addField(form, "Mã điều chỉnh", id);
-        addField(form, "Mã sản phẩm", product);
-        addField(form, "Số lượng giảm", quantity);
-        addField(form, "Lý do", reason);
-        if (!DialogActions.confirm(this, form, "Điều chỉnh giảm FIFO"))
+        JPanel form = FormValidator.form();
+        FormValidator validator = new FormValidator();
+        form.add(validator.row("Mã phiếu điều chỉnh", id));
+        form.add(validator.row("Sản phẩm", product));
+        form.add(validator.row("Số lượng giảm", quantity));
+        form.add(validator.row("Lý do", reason));
+        validator.custom(product, () -> {
+            String productId = UiFormat.idOf(String.valueOf(product.getEditor().getItem()));
+            if (productId.isEmpty())
+                return "Mã sản phẩm không được để trống.";
+            return productId.matches("893[0-9]{9}") ? null
+                    : "Mã sản phẩm sai định dạng, phải là mã vạch 12 chữ số bắt đầu bằng 893 (ví dụ: 893000000001).";
+        });
+        validator.require(quantity, "Số lượng giảm không được để trống.");
+        validator.check(quantity, text -> text.matches("[0-9]+"),
+                "Số lượng giảm phải là số nguyên dương.");
+        validator.custom(quantity, () -> {
+            String text = quantity.getText().trim();
+            if (!text.matches("[0-9]+"))
+                return null;
+            try {
+                return Integer.parseInt(text) > 0 ? null : "Số lượng giảm phải lớn hơn 0.";
+            } catch (NumberFormatException exception) {
+                return "Số lượng giảm phải là số nguyên dương.";
+            }
+        });
+        validator.require(reason, "Lý do điều chỉnh không được để trống.");
+        if (!DialogActions.confirm(this, form, "Điều chỉnh giảm FIFO", validator))
             return;
         final String adjustmentId = id.getText().trim();
-        final String productId = product.getText().trim();
+        final String productId = UiFormat.idOf(String.valueOf(product.getEditor().getItem()));
         final String adjustmentReason = reason.getText().trim();
-        final int amount;
-        try {
-            amount = Integer.parseInt(quantity.getText().trim());
-        } catch (NumberFormatException exception) {
-            message("Số lượng giảm phải là số nguyên dương.");
-            return;
-        }
-        if (adjustmentId.length() == 0 || productId.length() == 0 || adjustmentReason.length() == 0 || amount <= 0) {
-            message("Mã điều chỉnh, sản phẩm, số lượng dương và lý do là bắt buộc.");
-            return;
-        }
+        final int amount = Integer.parseInt(quantity.getText().trim());
         new SwingWorker<Void, Void>() {
             protected Void doInBackground() throws Exception {
                 new InventoryService().giamTonFifo(actor, adjustmentId, productId, amount, adjustmentReason);
@@ -219,8 +264,9 @@ public final class InventoryPanel extends JPanel {
                 try {
                     get();
                     load();
+                    message("Lập phiếu điều chỉnh tồn thành công.");
                 } catch (Exception exception) {
-                    message("Không điều chỉnh được tồn kho.");
+                    message("Không điều chỉnh được tồn kho.", exception);
                 }
             }
         }.execute();
@@ -231,13 +277,13 @@ public final class InventoryPanel extends JPanel {
         if (row < 0)
             return;
         final String adjustmentId = String.valueOf(adjustmentModel.getValueAt(row, 0));
-        new SwingWorker<DieuChinhTon, Void>() {
-            protected DieuChinhTon doInBackground() throws Exception {
-                return new InventoryService().chiTietDieuChinh(actor, adjustmentId);
+        new SwingWorker<PhieuDieuChinhTon, Void>() {
+            protected PhieuDieuChinhTon doInBackground() throws Exception {
+                return new InventoryService().chiTietPhieuDieuChinh(actor, adjustmentId);
             }
             protected void done() {
                 try {
-                    DieuChinhTon value = get();
+                    PhieuDieuChinhTon value = get();
                     DefaultTableModel details = new DefaultTableModel(new String[] {"Lô", "Số lượng giảm"}, 0) {
                         public boolean isCellEditable(int row, int column) {
                             return false;
@@ -248,18 +294,31 @@ public final class InventoryPanel extends JPanel {
                     JPanel form = new JPanel(new BorderLayout(0, 6));
                     form.add(new JLabel("Lý do: " + value.getLyDo() + "    Người lập: " + value.getMaNhanVien()),
                             BorderLayout.NORTH);
-                    form.add(new JScrollPane(new JTable(details)), BorderLayout.CENTER);
-                    JOptionPane.showMessageDialog(
-                            InventoryPanel.this, form, "Chi tiết " + adjustmentId, JOptionPane.INFORMATION_MESSAGE);
+                    JScrollPane detailScroll = new JScrollPane(new JTable(details));
+                    detailScroll.setPreferredSize(DialogActions.DETAIL_TABLE);
+                    form.add(detailScroll, BorderLayout.CENTER);
+                    DialogActions.info(InventoryPanel.this, form, "Chi tiết " + adjustmentId);
                 } catch (Exception exception) {
-                    message("Không tải được chi tiết điều chỉnh.");
+                    message("Không tải được chi tiết điều chỉnh.", exception);
                 }
             }
         }.execute();
     }
 
     private void message(String text) {
-        JOptionPane.showMessageDialog(this, text);
+        JOptionPane.showMessageDialog(this, text, "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void message(String fallback, Exception exception) {
+        Throwable cause = exception;
+        while (cause.getCause() != null
+                && cause instanceof java.util.concurrent.ExecutionException)
+            cause = cause.getCause();
+        String text = cause instanceof IllegalArgumentException || cause instanceof IllegalStateException
+                ? cause.getMessage()
+                : fallback;
+        JOptionPane.showMessageDialog(this, text == null ? fallback : text, "Lỗi",
+                JOptionPane.ERROR_MESSAGE);
     }
 
     private void addField(JPanel panel, String text, JComponent field) {

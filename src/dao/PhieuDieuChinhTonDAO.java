@@ -1,6 +1,6 @@
 package dao;
 
-import entity.DieuChinhTon;
+import entity.PhieuDieuChinhTon;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -11,10 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class DieuChinhTonDAO {
-  public void save(DieuChinhTon value, Connection c) throws SQLException {
+public class PhieuDieuChinhTonDAO {
+  public void save(PhieuDieuChinhTon value, Connection c) throws SQLException {
     try (PreparedStatement s = c.prepareStatement(
-             "INSERT INTO DIEU_CHINH_TON (ma_dieu_chinh,ma_nhan_vien,thoi_diem_lap,ly_do) VALUES "
+             "INSERT INTO PHIEU_DIEU_CHINH_TON (ma_dieu_chinh,ma_nhan_vien,thoi_diem_lap,ly_do) VALUES "
              + "(?,?,?,?)")) {
       s.setString(1, value.getMaDieuChinh());
       s.setString(2, value.getMaNhanVien());
@@ -26,7 +26,7 @@ public class DieuChinhTonDAO {
     }
     try (
         PreparedStatement s = c.prepareStatement(
-            "INSERT INTO CHI_TIET_DIEU_CHINH (ma_dieu_chinh,ma_lo,so_luong_giam) VALUES (?,?,?)")) {
+            "INSERT INTO CHI_TIET_PHIEU_DIEU_CHINH (ma_dieu_chinh,ma_lo,so_luong_giam) VALUES (?,?,?)")) {
       for (Map.Entry<Long, Integer> entry : value.getSoLuongGiamTheoLo().entrySet()) {
         s.setString(1, value.getMaDieuChinh());
         s.setLong(2, entry.getKey());
@@ -36,10 +36,24 @@ public class DieuChinhTonDAO {
       s.executeBatch();
     }
   }
-  public List<DieuChinhTon> search(String keyword, Connection c) throws SQLException {
-    List<DieuChinhTon> out = new ArrayList<DieuChinhTon>();
+  public String nextId(Connection c) throws SQLException {
+    try (PreparedStatement s =
+             c.prepareStatement("SELECT MAX(ma_dieu_chinh) FROM PHIEU_DIEU_CHINH_TON")) {
+      try (ResultSet r = s.executeQuery()) {
+        int next = 1;
+        if (r.next()) {
+          String max = r.getString(1);
+          if (max != null && max.matches("DC[0-9]+"))
+            next = Integer.parseInt(max.substring(2)) + 1;
+        }
+        return String.format("DC%03d", next);
+      }
+    }
+  }
+  public List<PhieuDieuChinhTon> search(String keyword, Connection c) throws SQLException {
+    List<PhieuDieuChinhTon> out = new ArrayList<PhieuDieuChinhTon>();
     try (PreparedStatement s = c.prepareStatement(
-             "SELECT ma_dieu_chinh FROM DIEU_CHINH_TON WHERE ? IS NULL OR ma_dieu_chinh LIKE ? OR "
+             "SELECT ma_dieu_chinh FROM PHIEU_DIEU_CHINH_TON WHERE ? IS NULL OR ma_dieu_chinh LIKE ? OR "
              + "ly_do LIKE ? ORDER BY thoi_diem_lap DESC")) {
       s.setString(1, keyword);
       s.setString(2, keyword == null ? null : "%" + keyword + "%");
@@ -50,10 +64,10 @@ public class DieuChinhTonDAO {
     }
     return out;
   }
-  public DieuChinhTon detail(String id, Connection c) throws SQLException {
-    DieuChinhTon value = new DieuChinhTon();
+  public PhieuDieuChinhTon detail(String id, Connection c) throws SQLException {
+    PhieuDieuChinhTon value = new PhieuDieuChinhTon();
     try (PreparedStatement s = c.prepareStatement(
-             "SELECT ma_nhan_vien,thoi_diem_lap,ly_do FROM DIEU_CHINH_TON WHERE ma_dieu_chinh=?")) {
+             "SELECT ma_nhan_vien,thoi_diem_lap,ly_do FROM PHIEU_DIEU_CHINH_TON WHERE ma_dieu_chinh=?")) {
       s.setString(1, id);
       try (ResultSet r = s.executeQuery()) {
         if (!r.next())
@@ -65,7 +79,7 @@ public class DieuChinhTonDAO {
       }
     }
     try (PreparedStatement s = c.prepareStatement(
-             "SELECT ma_lo,so_luong_giam FROM CHI_TIET_DIEU_CHINH WHERE ma_dieu_chinh=?")) {
+             "SELECT ma_lo,so_luong_giam FROM CHI_TIET_PHIEU_DIEU_CHINH WHERE ma_dieu_chinh=?")) {
       s.setString(1, id);
       try (ResultSet r = s.executeQuery()) {
         while (r.next()) value.getSoLuongGiamTheoLo().put(r.getLong(1), r.getInt(2));

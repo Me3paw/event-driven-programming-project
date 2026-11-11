@@ -46,7 +46,7 @@ build() {
     mkdir -p "$ROOT/bin"
     mapfile -d '' sources < <(find "$ROOT/src" -name '*.java' -print0)
     "$JDK/bin/javac" -encoding UTF-8 -source 1.8 -target 1.8 \
-        -cp "$ROOT/lib/mariadb-java-client-3.5.7.jar" -d "$ROOT/bin" "${sources[@]}"
+        -cp "$ROOT/lib/mssql-jdbc-13.2.0.jre11.jar" -d "$ROOT/bin" "${sources[@]}"
 }
 
 case "${1:-help}" in

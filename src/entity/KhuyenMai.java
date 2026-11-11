@@ -10,6 +10,7 @@ public class KhuyenMai {
   private String tenKhuyenMai;
   private String phamVi;
   private BigDecimal tyLeGiam;
+  private BigDecimal donToiThieu;
   private LocalDateTime batDau;
   private LocalDateTime ketThuc;
   private String trangThai;
@@ -38,6 +39,12 @@ public class KhuyenMai {
   }
   public void setTyLeGiam(BigDecimal tyLeGiam) {
     this.tyLeGiam = tyLeGiam;
+  }
+  public BigDecimal getDonToiThieu() {
+    return donToiThieu;
+  }
+  public void setDonToiThieu(BigDecimal donToiThieu) {
+    this.donToiThieu = donToiThieu;
   }
   public LocalDateTime getBatDau() {
     return batDau;

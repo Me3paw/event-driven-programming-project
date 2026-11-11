@@ -1,7 +1,10 @@
 package graphicUI;
 
 import components.ReceiptPrintable;
+import components.ReceiptPdfExporter;
 import components.DialogActions;
+import components.FormValidator;
+import components.UiFormat;
 import components.UiTheme;
 import entity.CauHinhCuaHang;
 import entity.ChiTietHoaDon;
@@ -11,13 +14,14 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
-import java.awt.print.PrinterJob;
+import java.io.File;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -43,11 +47,11 @@ public final class InvoicePanel extends JPanel {
     private final JTextField employee = new JTextField(9);
     private final JTextField customer = new JTextField(9);
     private final JComboBox<String> state = new JComboBox<String>(
-            new String[] {"", "DA_THANH_TOAN", "DA_HUY"});
+            new String[] {"Tất cả", "DA_THANH_TOAN", "DA_HUY"});
     private final JComboBox<String> paymentMethod = new JComboBox<String>(
-            new String[] {"", "TIEN_MAT", "THE", "QR"});
-    private final JTextField from = new JTextField(9);
-    private final JTextField to = new JTextField(9);
+            new String[] {"Tất cả", "TIEN_MAT", "THE", "QR"});
+    private final DateField from = new DateField();
+    private final DateField to = new DateField();
     private final List<HoaDon> rows = new ArrayList<HoaDon>();
     private final DefaultTableModel model = new DefaultTableModel(
             new String[] {"Mã", "Thời điểm", "Nhân viên", "Khách", "TT", "Tổng", "PTTT", "Tham chiếu"}, 0) {
@@ -61,6 +65,7 @@ public final class InvoicePanel extends JPanel {
     public InvoicePanel(Actor actor) {
         super(new BorderLayout(0, 8));
         this.actor = actor;
+        table.getColumnModel().getColumn(5).setCellRenderer(UiFormat.moneyRenderer());
         setBackground(UiTheme.BACKGROUND);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
@@ -72,8 +77,8 @@ public final class InvoicePanel extends JPanel {
         addFilter(bar, "Khách hàng", customer);
         addFilter(bar, "Trạng thái", state);
         addFilter(bar, "Thanh toán", paymentMethod);
-        addFilter(bar, "Từ ngày (yyyy-MM-dd)", from);
-        addFilter(bar, "Đến ngày (yyyy-MM-dd)", to);
+        addFilter(bar, "Từ ngày", from);
+        addFilter(bar, "Đến ngày", to);
         addButton(bar, "Tìm", new Runnable() { @Override public void run() { load(); } });
         addButton(bar, "Chi tiết", new Runnable() { @Override public void run() { detail(); } });
         addButton(bar, "In", new Runnable() { @Override public void run() { print(); } });
@@ -100,8 +105,10 @@ public final class InvoicePanel extends JPanel {
         final String keyword = key.getText().trim();
         final String employeeId = actor.isQuanLy() ? employee.getText().trim() : null;
         final String customerId = customer.getText().trim();
-        final String status = (String) state.getSelectedItem();
-        final String method = (String) paymentMethod.getSelectedItem();
+        final String status = "Tất cả".equals(state.getSelectedItem()) ? null
+                : (String) state.getSelectedItem();
+        final String method = "Tất cả".equals(paymentMethod.getSelectedItem()) ? null
+                : (String) paymentMethod.getSelectedItem();
         final LocalDate start;
         final LocalDate end;
         try {
@@ -130,11 +137,11 @@ public final class InvoicePanel extends JPanel {
                     model.setRowCount(0);
                     for (HoaDon invoice : rows) {
                         model.addRow(new Object[] {invoice.getMaHoaDon(), invoice.getThoiDiemLap(),
-                                invoice.getMaNhanVien(), invoice.getMaKhachHang(), invoice.getTrangThai(),
+                                invoice.getMaNhanVien(), customerLabel(invoice), invoice.getTrangThai(),
                                 invoice.getTongThanhToan(), invoice.getPhuongThucTt(), invoice.getMaThamChieuTt()});
                     }
                 } catch (Exception exception) {
-                    showError("Không tải được hóa đơn.");
+                    showError("Không tải được hóa đơn.", exception);
                 }
             }
         }.execute();
@@ -167,7 +174,7 @@ public final class InvoicePanel extends JPanel {
                 try {
                     showDetail(get());
                 } catch (Exception exception) {
-                    showError("Không tải được chi tiết.");
+                    showError("Không tải được chi tiết.", exception);
                 }
             }
         }.execute();
@@ -178,24 +185,24 @@ public final class InvoicePanel extends JPanel {
         addSummary(summary, "Mã hóa đơn", invoice.getMaHoaDon());
         addSummary(summary, "Lập lúc", invoice.getThoiDiemLap());
         addSummary(summary, "Nhân viên", invoice.getMaNhanVien());
-        addSummary(summary, "Khách hàng", invoice.getMaKhachHang());
+        addSummary(summary, "Khách hàng", customerLabel(invoice));
         addSummary(summary, "Khuyến mãi", invoice.getMaKhuyenMai());
         addSummary(summary, "Trạng thái", invoice.getTrangThai());
-        addSummary(summary, "Tổng gốc", invoice.getTongGiaGoc());
+        addSummary(summary, "Tổng gốc", money(invoice.getTongGiaGoc()));
         addSummary(summary, "Loại giảm giá", invoice.getLoaiGiamGia());
         addSummary(summary, "Tỷ lệ giảm", invoice.getTyLeGiam());
-        addSummary(summary, "Tiền giảm", invoice.getTienGiam());
+        addSummary(summary, "Tiền giảm", money(invoice.getTienGiam()));
         addSummary(summary, "Điểm sử dụng", invoice.getDiemSuDung());
-        addSummary(summary, "Tiền giảm điểm", invoice.getTienGiamDiem());
+        addSummary(summary, "Tiền giảm điểm", money(invoice.getTienGiamDiem()));
         addSummary(summary, "Điểm tích lũy kiếm", invoice.getDiemTichLuyKiem());
         addSummary(summary, "Điểm thưởng kiếm", invoice.getDiemThuongKiem());
         addSummary(summary, "Tỷ lệ VAT", invoice.getTyLeVat());
-        addSummary(summary, "Tiền VAT", invoice.getTienVat());
-        addSummary(summary, "Tổng thanh toán", invoice.getTongThanhToan());
+        addSummary(summary, "Tiền VAT", money(invoice.getTienVat()));
+        addSummary(summary, "Tổng thanh toán", money(invoice.getTongThanhToan()));
         addSummary(summary, "Phương thức", invoice.getPhuongThucTt());
         addSummary(summary, "Tham chiếu", invoice.getMaThamChieuTt());
-        addSummary(summary, "Tiền khách đưa", invoice.getTienKhachDua());
-        addSummary(summary, "Tiền thừa", invoice.getTienThua());
+        addSummary(summary, "Tiền khách đưa", money(invoice.getTienKhachDua()));
+        addSummary(summary, "Tiền thừa", money(invoice.getTienThua()));
         addSummary(summary, "Nhân viên hủy", invoice.getMaNhanVienHuy());
         addSummary(summary, "Hủy lúc", invoice.getThoiDiemHuy());
         addSummary(summary, "Lý do hủy", invoice.getLyDoHuy());
@@ -203,11 +210,11 @@ public final class InvoicePanel extends JPanel {
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Dòng hàng", new JScrollPane(lineTable(invoice.getChiTiet())));
         tabs.addTab("Phân bổ FIFO", new JScrollPane(allocationTable(invoice.getPhanBo())));
+        tabs.setPreferredSize(DialogActions.DETAIL_TABLE);
         JPanel content = new JPanel(new BorderLayout(0, 8));
         content.add(summary, BorderLayout.NORTH);
         content.add(tabs, BorderLayout.CENTER);
-        JOptionPane.showMessageDialog(this, content, "Hóa đơn bất biến " + invoice.getMaHoaDon(),
-                JOptionPane.INFORMATION_MESSAGE);
+        DialogActions.info(this, content, "Hóa đơn bất biến " + invoice.getMaHoaDon());
     }
 
     private JTable lineTable(List<ChiTietHoaDon> lines) {
@@ -217,7 +224,10 @@ public final class InvoicePanel extends JPanel {
             lineModel.addRow(new Object[] {line.getMaSanPham(), line.getSoLuong(), line.getDonGiaBan(),
                     line.getTienGiamDong(), line.getThanhTien()});
         }
-        return new JTable(lineModel);
+        JTable lineTable = new JTable(lineModel);
+        for (int column = 2; column <= 4; column++)
+            lineTable.getColumnModel().getColumn(column).setCellRenderer(UiFormat.moneyRenderer());
+        return lineTable;
     }
 
     private JTable allocationTable(List<PhanBoXuatLo> allocations) {
@@ -227,7 +237,9 @@ public final class InvoicePanel extends JPanel {
             allocationModel.addRow(new Object[] {allocation.getMaSanPham(), allocation.getMaLo(),
                     allocation.getSoLuongXuat(), allocation.getDonGiaVon()});
         }
-        return new JTable(allocationModel);
+        JTable allocationTable = new JTable(allocationModel);
+        allocationTable.getColumnModel().getColumn(3).setCellRenderer(UiFormat.moneyRenderer());
+        return allocationTable;
     }
 
     private DefaultTableModel nonEditableModel(String[] columns) {
@@ -237,6 +249,15 @@ public final class InvoicePanel extends JPanel {
                 return false;
             }
         };
+    }
+
+    private static String customerLabel(HoaDon invoice) {
+        String id = invoice.getMaKhachHang();
+        return id == null || id.trim().isEmpty() || SaleService.KHACH_LE.equals(id) ? "Khách lẻ" : id;
+    }
+
+    private String money(java.math.BigDecimal value) {
+        return value == null ? "" : UiFormat.money(value) + " đ";
     }
 
     private void addSummary(JPanel panel, String label, Object value) {
@@ -266,23 +287,32 @@ public final class InvoicePanel extends JPanel {
                     JTextArea preview = new JTextArea();
                     preview.setEditable(false);
                     for (String line : receipt.lines()) preview.append(line + "\n");
-                    if (JOptionPane.showConfirmDialog(InvoicePanel.this, new JScrollPane(preview),
-                            "Xem trước hóa đơn", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) print(receipt);
+                    JScrollPane scroll = new JScrollPane(preview);
+                    scroll.setPreferredSize(DialogActions.PREVIEW_TEXT);
+                    if (DialogActions.confirm(InvoicePanel.this, scroll,
+                            "Xem trước hóa đơn"))
+                        exportPdf(receipt, invoiceId);
                 } catch (Exception exception) {
-                    showError("Không tải được hóa đơn để in.");
+                    showError("Không tải được hóa đơn để in.", exception);
                 }
             }
         }.execute();
     }
 
-    private void print(final ReceiptPrintable receipt) {
-        final PrinterJob job = PrinterJob.getPrinterJob();
-        job.setPrintable(receipt);
-        if (!job.printDialog()) return;
+    private void exportPdf(final ReceiptPrintable receipt, String invoiceId) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Lưu hóa đơn PDF");
+        chooser.setSelectedFile(new File("hoa-don-" + invoiceId + ".pdf"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION)
+            return;
+        File selected = chooser.getSelectedFile();
+        if (!selected.getName().toLowerCase().endsWith(".pdf"))
+            selected = new File(selected.getParentFile(), selected.getName() + ".pdf");
+        final File target = selected;
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                job.print();
+                ReceiptPdfExporter.export(receipt, target);
                 return null;
             }
 
@@ -290,8 +320,11 @@ public final class InvoicePanel extends JPanel {
             protected void done() {
                 try {
                     get();
+                    JOptionPane.showMessageDialog(InvoicePanel.this,
+                            "Đã lưu hóa đơn PDF:\n" + target.getAbsolutePath(), "Xuất hóa đơn thành công",
+                            JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception exception) {
-                    showError("Không in được hóa đơn.");
+                    showError("Không xuất được hóa đơn PDF.", exception);
                 }
             }
         }.execute();
@@ -309,10 +342,13 @@ public final class InvoicePanel extends JPanel {
         }
         JTextField reason = new JTextField();
         JPasswordField password = new JPasswordField();
-        JPanel form = new JPanel(new GridLayout(0, 1, 0, 4));
-        addFilter(form, "Lý do", reason);
-        addFilter(form, "Mật khẩu quản lý", password);
-        if (!DialogActions.confirm(this, form, "Xác nhận hủy hóa đơn")) {
+        JPanel form = FormValidator.form();
+        FormValidator validator = new FormValidator();
+        form.add(validator.row("Lý do", reason));
+        form.add(validator.row("Mật khẩu quản lý", password));
+        validator.require(reason, "Cần nhập lý do hủy hóa đơn.");
+        validator.require(password, "Cần nhập mật khẩu quản lý.");
+        if (!DialogActions.confirm(this, form, "Xác nhận hủy hóa đơn", validator)) {
             password.setText("");
             return;
         }
@@ -320,11 +356,6 @@ public final class InvoicePanel extends JPanel {
         final String cancellationReason = reason.getText().trim();
         final char[] managerPassword = password.getPassword();
         password.setText("");
-        if (cancellationReason.isEmpty() || managerPassword.length == 0) {
-            Arrays.fill(managerPassword, '\0');
-            showError("Cần lý do và mật khẩu quản lý.");
-            return;
-        }
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
@@ -339,14 +370,27 @@ public final class InvoicePanel extends JPanel {
                 try {
                     get();
                     load();
+                    JOptionPane.showMessageDialog(InvoicePanel.this, "Hủy hóa đơn thành công.", "Thành công",
+                            JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception exception) {
-                    showError("Không hủy được hóa đơn.");
+                    showError("Không hủy được hóa đơn.", exception);
                 }
             }
         }.execute();
     }
 
     private void showError(String message) {
-        JOptionPane.showMessageDialog(this, message);
+        JOptionPane.showMessageDialog(this, message, "Lỗi", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private void showError(String fallback, Exception exception) {
+        Throwable cause = exception;
+        while (cause.getCause() != null
+                && (cause instanceof java.util.concurrent.ExecutionException
+                    || cause instanceof java.lang.reflect.InvocationTargetException))
+            cause = cause.getCause();
+        String message = cause instanceof IllegalArgumentException || cause instanceof IllegalStateException
+                || cause instanceof SecurityException ? cause.getMessage() : fallback;
+        showError(message == null || message.trim().isEmpty() ? fallback : message);
     }
 }

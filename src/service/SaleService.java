@@ -33,7 +33,9 @@ import java.util.List;
 import java.util.Set;
 
 public class SaleService {
+  public static final String KHACH_LE = "KH000";
   private static final BigDecimal HUNDRED = new BigDecimal("100");
+  private static final long DIEM_SU_DUNG_BUOC = 1000;
   private static final int MAX_CHECKOUT_ATTEMPTS = 3;
   private final SanPhamDAO sanPhamDAO = new SanPhamDAO();
   private final KhachHangDAO khachHangDAO = new KhachHangDAO();
@@ -57,6 +59,11 @@ public class SaleService {
 
   public List<KhuyenMai> activePromotions(Actor actor, Set<String> productIds, LocalDateTime at)
       throws SQLException {
+    return activePromotions(actor, productIds, null, at);
+  }
+
+  public List<KhuyenMai> activePromotions(Actor actor, Set<String> productIds, BigDecimal subtotal,
+      LocalDateTime at) throws SQLException {
     Access.actor(actor);
     Set<String> ids = new LinkedHashSet<String>();
     if (productIds != null)
@@ -64,7 +71,17 @@ public class SaleService {
         if (valid(id))
           ids.add(id.trim());
     try (Connection connection = DBConnection.open()) {
-      return khuyenMaiDAO.activeForProducts(ids, at == null ? LocalDateTime.now() : at, connection);
+      List<KhuyenMai> promotions =
+          khuyenMaiDAO.activeForProducts(ids, at == null ? LocalDateTime.now() : at, connection);
+      if (subtotal == null)
+        return promotions;
+      List<KhuyenMai> eligible = new java.util.ArrayList<KhuyenMai>();
+      for (KhuyenMai promotion : promotions)
+        if (!PhamViKhuyenMai.TOAN_DON.name().equals(promotion.getPhamVi())
+            || promotion.getDonToiThieu() == null
+            || subtotal.compareTo(promotion.getDonToiThieu()) >= 0)
+          eligible.add(promotion);
+      return eligible;
     }
   }
 
@@ -81,6 +98,8 @@ public class SaleService {
   public List<HoaDon> timHoaDon(Actor actor, String keyword, String maNhanVien, String maKhachHang,
       String trangThai, String phuongThuc, LocalDate from, LocalDate to) throws SQLException {
     Access.actor(actor);
+    if (lengthOver(keyword, 100) || lengthOver(maNhanVien, 30) || lengthOver(maKhachHang, 30))
+      throw new IllegalArgumentException("Thông tin tìm kiếm vượt quá độ dài cho phép");
     if (from != null && to != null && from.isAfter(to))
       throw new IllegalArgumentException("Khoảng ngày không hợp lệ");
     String status = Access.blankToNull(trangThai);
@@ -92,6 +111,9 @@ public class SaleService {
     return timHoaDon(Access.blankToNull(keyword),
         actor.isQuanLy() ? Access.blankToNull(maNhanVien) : actor.getMaNhanVien(),
         Access.blankToNull(maKhachHang), status, paymentMethod, from, to);
+  }
+  private boolean lengthOver(String value, int max) {
+    return value != null && value.trim().length() > max;
   }
 
   public HoaDon chiTietHoaDon(Actor actor, String maHoaDon) throws SQLException {
@@ -105,7 +127,7 @@ public class SaleService {
 
   private BaoGia baoGia(YeuCauThanhToan request) throws SQLException {
     try (Connection connection = DBConnection.open()) {
-      return new BaoGia(tinh(request, connection, true));
+      return new BaoGia(tinh(request, connection, true, false));
     }
   }
 
@@ -124,11 +146,11 @@ public class SaleService {
     try (Connection connection = DBConnection.open()) {
       connection.setAutoCommit(false);
       try {
-        HoaDon hoaDon = tinh(request, connection, true);
+        HoaDon hoaDon = tinh(request, connection, true, true);
         hoaDonDAO.save(hoaDon, connection);
         for (PhanBoXuatLo allocation : hoaDon.getPhanBo())
           loTonKhoDAO.change(allocation.getMaLo(), -allocation.getSoLuongXuat(), connection);
-        if (hoaDon.getMaKhachHang() != null)
+        if (hoaDon.getMaKhachHang() != null && !KHACH_LE.equals(hoaDon.getMaKhachHang()))
           khachHangDAO.updatePoints(hoaDon.getMaKhachHang(),
               hoaDon.getDiemThuongKiem() - hoaDon.getDiemSuDung(), hoaDon.getDiemTichLuyKiem(),
               connection);
@@ -145,8 +167,10 @@ public class SaleService {
 
   private void huyHoaDon(String maHoaDon, String lyDo, String tenDangNhapQuanLy,
       char[] matKhauQuanLy) throws SQLException {
-    if (lyDo == null || lyDo.trim().isEmpty())
-      throw new IllegalArgumentException("Phải nhập lý do hủy");
+    if (!valid(maHoaDon) || maHoaDon.trim().length() > 30)
+      throw new IllegalArgumentException("Mã hóa đơn không hợp lệ");
+    if (lyDo == null || lyDo.trim().isEmpty() || lyDo.trim().length() > 255)
+      throw new IllegalArgumentException("Lý do hủy phải từ 1 đến 255 ký tự");
     try (Connection connection = DBConnection.open()) {
       connection.setAutoCommit(false);
       try {
@@ -155,11 +179,11 @@ public class SaleService {
         HoaDon hoaDon = hoaDonDAO.lock(maHoaDon, connection);
         if (hoaDon == null || !TrangThaiHoaDon.DA_THANH_TOAN.name().equals(hoaDon.getTrangThai()))
           throw new IllegalStateException("Hóa đơn không thể hủy");
-        if (hoaDon.getMaKhachHang() != null)
+        if (hoaDon.getMaKhachHang() != null && !KHACH_LE.equals(hoaDon.getMaKhachHang()))
           khachHangDAO.lock(hoaDon.getMaKhachHang(), connection);
         for (PhanBoXuatLo allocation : hoaDonDAO.allocations(maHoaDon, connection))
           loTonKhoDAO.change(allocation.getMaLo(), allocation.getSoLuongXuat(), connection);
-        if (hoaDon.getMaKhachHang() != null)
+        if (hoaDon.getMaKhachHang() != null && !KHACH_LE.equals(hoaDon.getMaKhachHang()))
           khachHangDAO.updatePoints(hoaDon.getMaKhachHang(), hoaDon.getDiemSuDung(), 0, connection);
         hoaDonDAO.cancel(maHoaDon, manager.getMaNhanVien(), lyDo.trim(), connection);
         connection.commit();
@@ -169,6 +193,15 @@ public class SaleService {
       } finally {
         connection.setAutoCommit(true);
       }
+    }
+  }
+
+  public int tonKho(Actor actor, String maSanPham) throws SQLException {
+    Access.actor(actor);
+    if (!valid(maSanPham))
+      throw new IllegalArgumentException("Mã sản phẩm không hợp lệ");
+    try (Connection connection = DBConnection.open()) {
+      return loTonKhoDAO.ton(maSanPham.trim(), connection);
     }
   }
 
@@ -185,19 +218,25 @@ public class SaleService {
     }
   }
 
-  private HoaDon tinh(YeuCauThanhToan request, Connection connection, boolean lock)
+  private HoaDon tinh(YeuCauThanhToan request, Connection connection, boolean lock,
+      boolean validatePayment)
       throws SQLException {
     if (request == null || request.getDongHang() == null || request.getDongHang().isEmpty())
       throw new IllegalArgumentException("Hóa đơn phải có hàng");
     HoaDon hoaDon = new HoaDon();
-    hoaDon.setMaHoaDon(
-        valid(request.getMaHoaDon()) ? request.getMaHoaDon() : "HD" + System.currentTimeMillis());
+    String requestedInvoiceId = Access.blankToNull(request.getMaHoaDon());
+    if (requestedInvoiceId != null
+        && (!ValidationRules.matches(requestedInvoiceId, ValidationRules.INVOICE_ID)
+            || requestedInvoiceId.length() > 20))
+      throw new IllegalArgumentException("Mã hóa đơn sai định dạng, phải có dạng HD + số (ví dụ: HD001)");
+    hoaDon.setMaHoaDon(requestedInvoiceId == null ? "HD" + System.currentTimeMillis() : requestedInvoiceId);
     hoaDon.setMaNhanVien(request.getMaNhanVien());
     hoaDon.setMaKhachHang(emptyToNull(request.getMaKhachHang()));
     hoaDon.setThoiDiemLap(LocalDateTime.now());
     hoaDon.setTrangThai(TrangThaiHoaDon.DA_THANH_TOAN.name());
     KhachHang customer = null;
-    if (hoaDon.getMaKhachHang() != null) {
+    boolean walkIn = KHACH_LE.equals(hoaDon.getMaKhachHang());
+    if (hoaDon.getMaKhachHang() != null && !walkIn) {
       customer = lock ? khachHangDAO.lock(hoaDon.getMaKhachHang(), connection) : null;
       if (lock
           && (customer == null
@@ -215,6 +254,7 @@ public class SaleService {
         throw new IllegalArgumentException("Sản phẩm không kinh doanh");
       ChiTietHoaDon detail = new ChiTietHoaDon();
       detail.setMaSanPham(product.getMaSanPham());
+      detail.setTenSanPham(product.getTenSanPham());
       detail.setSoLuong(line.getSoLuong());
       detail.setDonGiaBan(product.getGiaBan());
       detail.setTienGiamDong(BigDecimal.ZERO);
@@ -254,6 +294,12 @@ public class SaleService {
     }
     if (LoaiGiamGia.KHUYEN_MAI.name().equals(discountType) && eligibleBase.signum() == 0)
       throw new IllegalArgumentException("Khuyến mãi không áp dụng cho giỏ hàng");
+    if (LoaiGiamGia.KHUYEN_MAI.name().equals(discountType)
+        && PhamViKhuyenMai.TOAN_DON.name().equals(promotion.getPhamVi())
+        && promotion.getDonToiThieu() != null
+        && eligibleBase.compareTo(promotion.getDonToiThieu()) < 0)
+      throw new IllegalArgumentException("Đơn chưa đạt giá trị tối thiểu " + promotion.getDonToiThieu()
+          + " của khuyến mãi " + promotion.getMaKhuyenMai());
     BigDecimal discount =
         money(eligibleBase.multiply(rate).divide(HUNDRED, 2, RoundingMode.HALF_UP));
     BigDecimal allocated = BigDecimal.ZERO;
@@ -283,10 +329,12 @@ public class SaleService {
     hoaDon.setTienGiam(discount);
     long used = request.getDiemThuongSuDung();
     BigDecimal afterDiscount = original.subtract(discount);
-    if (used < 0 || BigDecimal.valueOf(used).compareTo(afterDiscount) > 0
+    if (used < 0 || used % DIEM_SU_DUNG_BUOC != 0
+        || BigDecimal.valueOf(used).compareTo(afterDiscount) > 0
         || (lock && customer != null && used > customer.getDiemHienCo())
         || (used > 0 && customer == null && lock))
-      throw new IllegalArgumentException("Điểm thưởng không hợp lệ");
+      throw new IllegalArgumentException("Điểm thưởng không hợp lệ, phải là bội số của "
+          + DIEM_SU_DUNG_BUOC + " và không vượt quá số dư");
     hoaDon.setDiemSuDung(used);
     hoaDon.setTienGiamDiem(BigDecimal.valueOf(used));
     CauHinhCuaHang config = cauHinhDAO.get(connection);
@@ -300,7 +348,19 @@ public class SaleService {
                                               : original.multiply(new BigDecimal("0.05"))
                                                     .setScale(0, RoundingMode.FLOOR)
                                                     .longValueExact());
-    payment(request, hoaDon);
+    if (validatePayment)
+      payment(request, hoaDon);
+    else {
+      hoaDon.setPhuongThucTt(request.getPhuongThucThanhToan());
+      if (PhuongThucThanhToan.TIEN_MAT.name().equals(request.getPhuongThucThanhToan())
+          && request.getTienKhachDua() != null) {
+        hoaDon.setTienKhachDua(request.getTienKhachDua());
+        hoaDon.setTienThua(request.getTienKhachDua().subtract(hoaDon.getTongThanhToan())
+            .max(BigDecimal.ZERO));
+      } else {
+        hoaDon.setTienThua(BigDecimal.ZERO);
+      }
+    }
     if (lock)
       allocate(hoaDon, connection);
     return hoaDon;

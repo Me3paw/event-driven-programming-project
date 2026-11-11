@@ -69,5 +69,7 @@ public class ReportService {
   private void range(LocalDate from, LocalDate to) {
     if (from == null || to == null || from.isAfter(to))
       throw new IllegalArgumentException("Khoảng ngày không hợp lệ");
+    if (from.plusYears(1).isBefore(to))
+      throw new IllegalArgumentException("Khoảng báo cáo không được vượt quá 1 năm");
   }
 }

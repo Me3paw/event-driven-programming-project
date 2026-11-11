@@ -34,6 +34,7 @@ CREATE TABLE SAN_PHAM (
     gia_ban DECIMAL(15,0) NOT NULL,
     nguong_ton INT NOT NULL,
     trang_thai VARCHAR(20) NOT NULL,
+    CHECK (ma_san_pham REGEXP '^893[0-9]{9}$'),
     CHECK (gia_ban >= 0),
     CHECK (nguong_ton >= 0),
     CHECK (trang_thai IN ('DANG_KINH_DOANH', 'NGUNG_KINH_DOANH')),
@@ -76,11 +77,14 @@ CREATE TABLE KHUYEN_MAI (
     ten_khuyen_mai VARCHAR(150) NOT NULL,
     pham_vi VARCHAR(20) NOT NULL,
     ty_le_giam DECIMAL(5,2) NOT NULL,
+    don_toi_thieu DECIMAL(15,0) NULL,
     bat_dau DATETIME NOT NULL,
     ket_thuc DATETIME NOT NULL,
     trang_thai VARCHAR(20) NOT NULL,
     CHECK (pham_vi IN ('TOAN_DON', 'THEO_SAN_PHAM')),
     CHECK (ty_le_giam > 0 AND ty_le_giam <= 100),
+    CHECK (don_toi_thieu IS NULL OR don_toi_thieu > 0),
+    CHECK (pham_vi <> 'TOAN_DON' OR don_toi_thieu IS NOT NULL),
     CHECK (bat_dau < ket_thuc),
     CHECK (trang_thai IN ('DANG_HOAT_DONG', 'NGUNG_HOAT_DONG'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -133,7 +137,7 @@ CREATE TABLE LO_TON_KHO (
         REFERENCES CHI_TIET_PHIEU_NHAP(ma_phieu_nhap, ma_san_pham)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE DIEU_CHINH_TON (
+CREATE TABLE PHIEU_DIEU_CHINH_TON (
     ma_dieu_chinh VARCHAR(20) PRIMARY KEY,
     ma_nhan_vien VARCHAR(20) NOT NULL,
     thoi_diem_lap DATETIME NOT NULL,
@@ -141,13 +145,13 @@ CREATE TABLE DIEU_CHINH_TON (
     FOREIGN KEY (ma_nhan_vien) REFERENCES NHAN_VIEN(ma_nhan_vien)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE CHI_TIET_DIEU_CHINH (
+CREATE TABLE CHI_TIET_PHIEU_DIEU_CHINH (
     ma_dieu_chinh VARCHAR(20) NOT NULL,
     ma_lo BIGINT NOT NULL,
     so_luong_giam INT NOT NULL,
     PRIMARY KEY (ma_dieu_chinh, ma_lo),
     CHECK (so_luong_giam > 0),
-    FOREIGN KEY (ma_dieu_chinh) REFERENCES DIEU_CHINH_TON(ma_dieu_chinh),
+    FOREIGN KEY (ma_dieu_chinh) REFERENCES PHIEU_DIEU_CHINH_TON(ma_dieu_chinh),
     FOREIGN KEY (ma_lo) REFERENCES LO_TON_KHO(ma_lo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -245,7 +249,7 @@ INSERT INTO LOAI_SAN_PHAM (ma_loai, ten_loai, mo_ta, trang_thai) VALUES
     ('LSP001', 'Nuoc uong', 'San pham giai khat', 'DANG_KINH_DOANH');
 
 INSERT INTO SAN_PHAM (ma_san_pham, ma_loai, ten_san_pham, don_vi_tinh, gia_ban, nguong_ton, trang_thai) VALUES
-    ('SP001', 'LSP001', 'Nuoc suoi 500ml', 'Chai', 3000, 10, 'DANG_KINH_DOANH');
+    ('893000000001', 'LSP001', 'Nuoc suoi 500ml', 'Chai', 3000, 10, 'DANG_KINH_DOANH');
 
 INSERT INTO KHACH_HANG (ma_khach_hang, ho_ten, so_dien_thoai, diem_hien_co, diem_tich_luy, trang_thai) VALUES
     ('KH001', 'Le Minh Khach', '0900000003', 600, 12000, 'HOAT_DONG');
@@ -260,21 +264,21 @@ INSERT INTO KHUYEN_MAI (ma_khuyen_mai, ten_khuyen_mai, pham_vi, ty_le_giam, bat_
     ('KM001', 'Giam gia nuoc suoi', 'THEO_SAN_PHAM', 10.00, '2026-01-01 00:00:00', '2026-12-31 23:59:59', 'DANG_HOAT_DONG');
 
 INSERT INTO KHUYEN_MAI_SAN_PHAM (ma_khuyen_mai, ma_san_pham) VALUES
-    ('KM001', 'SP001');
+    ('KM001', '893000000001');
 
 INSERT INTO PHIEU_NHAP (ma_phieu_nhap, ma_nha_cung_cap, ma_nhan_vien, thoi_diem_lap, thoi_diem_hoan_tat, trang_thai, tong_tien) VALUES
     ('PN001', 'NCC001', 'NV001', '2026-08-01 08:00:00', '2026-08-01 08:00:00', 'HOAN_TAT', 800000);
 
 INSERT INTO CHI_TIET_PHIEU_NHAP (ma_phieu_nhap, ma_san_pham, so_luong, don_gia_nhap) VALUES
-    ('PN001', 'SP001', 100, 8000);
+    ('PN001', '893000000001', 100, 8000);
 
 INSERT INTO LO_TON_KHO (ma_lo, ma_phieu_nhap, ma_san_pham, so_luong_nhap, so_luong_con, thoi_diem_nhap) VALUES
-    (1, 'PN001', 'SP001', 100, 95, '2026-08-01 08:00:00');
+    (1, 'PN001', '893000000001', 100, 95, '2026-08-01 08:00:00');
 
-INSERT INTO DIEU_CHINH_TON (ma_dieu_chinh, ma_nhan_vien, thoi_diem_lap, ly_do) VALUES
+INSERT INTO PHIEU_DIEU_CHINH_TON (ma_dieu_chinh, ma_nhan_vien, thoi_diem_lap, ly_do) VALUES
     ('DC001', 'NV001', '2026-08-03 09:00:00', 'Hang hong');
 
-INSERT INTO CHI_TIET_DIEU_CHINH (ma_dieu_chinh, ma_lo, so_luong_giam) VALUES
+INSERT INTO CHI_TIET_PHIEU_DIEU_CHINH (ma_dieu_chinh, ma_lo, so_luong_giam) VALUES
     ('DC001', 1, 1);
 
 INSERT INTO HOA_DON (
@@ -292,7 +296,7 @@ INSERT INTO HOA_DON (
 );
 
 INSERT INTO CHI_TIET_HOA_DON (ma_hoa_don, ma_san_pham, so_luong, don_gia_ban, tien_giam_dong, thanh_tien) VALUES
-    ('HD001', 'SP001', 4, 3000, 0, 12000);
+    ('HD001', '893000000001', 4, 3000, 0, 12000);
 
 INSERT INTO PHAN_BO_XUAT_LO (ma_hoa_don, ma_san_pham, ma_lo, so_luong_xuat, don_gia_von) VALUES
-    ('HD001', 'SP001', 1, 4, 8000);
+    ('HD001', '893000000001', 1, 4, 8000);

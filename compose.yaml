@@ -5,9 +5,7 @@ services:
     image: mariadb:11.8
     environment:
       MARIADB_DATABASE: cua_hang_tien_loi
-      MARIADB_USER: cua_hang_app
-      MARIADB_PASSWORD: cua_hang_dev
-      MARIADB_ROOT_PASSWORD: cua_hang_root_dev
+      MARIADB_ROOT_PASSWORD: sapassword
     ports:
       - "127.0.0.1:3307:3306"
     volumes:

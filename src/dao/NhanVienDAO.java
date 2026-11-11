@@ -10,10 +10,13 @@ import java.util.List;
 
 public class NhanVienDAO {
   public void save(NhanVien value, Connection connection) throws SQLException {
-    String sql =
-        "INSERT INTO NHAN_VIEN (ma_nhan_vien, ho_ten, so_dien_thoai, chuc_vu, trang_thai) VALUES "
-        + "(?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ho_ten = VALUES(ho_ten), so_dien_thoai = "
-        + "VALUES(so_dien_thoai), chuc_vu = VALUES(chuc_vu), trang_thai = VALUES(trang_thai)";
+    String sql = "MERGE NHAN_VIEN AS target USING (VALUES (?, ?, ?, ?, ?)) AS source "
+        + "(ma_nhan_vien,ho_ten,so_dien_thoai,chuc_vu,trang_thai) "
+        + "ON target.ma_nhan_vien=source.ma_nhan_vien WHEN MATCHED THEN UPDATE SET "
+        + "ho_ten=source.ho_ten,so_dien_thoai=source.so_dien_thoai,chuc_vu=source.chuc_vu,"
+        + "trang_thai=source.trang_thai WHEN NOT MATCHED THEN INSERT "
+        + "(ma_nhan_vien,ho_ten,so_dien_thoai,chuc_vu,trang_thai) VALUES "
+        + "(source.ma_nhan_vien,source.ho_ten,source.so_dien_thoai,source.chuc_vu,source.trang_thai);";
     try (PreparedStatement statement = connection.prepareStatement(sql)) {
       statement.setString(1, value.getMaNhanVien());
       statement.setString(2, value.getHoTen());
@@ -34,11 +37,12 @@ public class NhanVienDAO {
     }
   }
 
-  public List<NhanVien> search(String keyword, String trangThai, Connection connection)
-      throws SQLException {
+  public List<NhanVien> search(String keyword, String trangThai, String chucVu,
+      Connection connection) throws SQLException {
     String sql =
         "SELECT * FROM NHAN_VIEN WHERE (? IS NULL OR ma_nhan_vien LIKE ? OR ho_ten LIKE ? OR "
-        + "so_dien_thoai LIKE ?) AND (? IS NULL OR trang_thai = ?) ORDER BY ma_nhan_vien";
+        + "so_dien_thoai LIKE ?) AND (? IS NULL OR trang_thai = ?) "
+        + "AND (? IS NULL OR chuc_vu LIKE ?) ORDER BY ma_nhan_vien DESC";
     List<NhanVien> values = new ArrayList<NhanVien>();
     try (PreparedStatement statement = connection.prepareStatement(sql)) {
       statement.setString(1, keyword);
@@ -47,11 +51,28 @@ public class NhanVienDAO {
       statement.setString(4, keyword == null ? null : "%" + keyword + "%");
       statement.setString(5, trangThai);
       statement.setString(6, trangThai);
+      statement.setString(7, chucVu);
+      statement.setString(8, chucVu == null ? null : "%" + chucVu + "%");
       try (ResultSet result = statement.executeQuery()) {
         while (result.next()) values.add(map(result));
       }
     }
     return values;
+  }
+
+  public String nextId(Connection connection) throws SQLException {
+    try (PreparedStatement statement =
+             connection.prepareStatement("SELECT MAX(ma_nhan_vien) FROM NHAN_VIEN")) {
+      try (ResultSet result = statement.executeQuery()) {
+        int next = 1;
+        if (result.next()) {
+          String max = result.getString(1);
+          if (max != null && max.matches("NV[0-9]{3}"))
+            next = Integer.parseInt(max.substring(2)) + 1;
+        }
+        return String.format("NV%03d", next);
+      }
+    }
   }
 
   public void delete(String maNhanVien, Connection connection) throws SQLException {

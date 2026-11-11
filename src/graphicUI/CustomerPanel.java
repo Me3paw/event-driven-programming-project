@@ -1,6 +1,8 @@
 package graphicUI;
 
 import components.DialogActions;
+import components.FormValidator;
+import components.UiFormat;
 import entity.HoaDon;
 import entity.KhachHang;
 import java.awt.BorderLayout;
@@ -9,6 +11,7 @@ import java.awt.GridLayout;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -27,7 +30,8 @@ public final class CustomerPanel extends JPanel {
     private static final long serialVersionUID = 1L;
     private final Actor actor;
     private final JTextField key = new JTextField(18);
-    private final JTextField state = new JTextField("HOAT_DONG", 12);
+    private final JComboBox<String> state = new JComboBox<String>(
+            new String[] {"Đang hoạt động", "Ngừng hoạt động", "Tất cả"});
     private final List<KhachHang> rows = new ArrayList<KhachHang>();
     private final DefaultTableModel model = new DefaultTableModel(
             new String[] {"Mã", "Họ tên", "Điện thoại", "Điểm thưởng", "Điểm tích lũy", "Trạng thái"}, 0) {
@@ -52,7 +56,6 @@ public final class CustomerPanel extends JPanel {
         button(bar, "Thêm", new Runnable() { @Override public void run() { edit(null); } });
         button(bar, "Sửa", new Runnable() { @Override public void run() { editSelected(); } });
         button(bar, "Đổi trạng thái", new Runnable() { @Override public void run() { toggle(); } });
-        button(bar, "Xóa", new Runnable() { @Override public void run() { remove(); } });
         add(bar, BorderLayout.NORTH);
         add(new JScrollPane(table), BorderLayout.CENTER);
         load();
@@ -74,7 +77,9 @@ public final class CustomerPanel extends JPanel {
 
     private void load() {
         final String keyword = key.getText().trim();
-        final String filter = state.getText().trim();
+        final String selected = (String) state.getSelectedItem();
+        final String filter = "Tất cả".equals(selected) ? ""
+                : "Ngừng hoạt động".equals(selected) ? "NGUNG_HOAT_DONG" : "HOAT_DONG";
         table.clearSelection();
         new SwingWorker<List<KhachHang>, Void>() {
             @Override
@@ -90,10 +95,10 @@ public final class CustomerPanel extends JPanel {
                     model.setRowCount(0);
                     for (KhachHang value : rows) {
                         model.addRow(new Object[] {value.getMaKhachHang(), value.getHoTen(), value.getSoDienThoai(),
-                                value.getDiemHienCo(), value.getDiemTichLuy(), value.getTrangThai()});
+                                value.getDiemHienCo(), value.getDiemTichLuy(), statusLabel(value.getTrangThai())});
                     }
                 } catch (Exception exception) {
-                    message("Không tải được khách hàng.");
+                    message("Không tải được khách hàng.", exception);
                 }
             }
         }.execute();
@@ -145,49 +150,92 @@ public final class CustomerPanel extends JPanel {
                     content.add(
                             new JLabel(value.getMaKhachHang() + " · " + value.getHoTen() + " · "
                                     + value.getSoDienThoai() + " · " + value.getTrangThai() + " · Chi tiêu: "
-                                    + profile.getActualSpend() + " · Hạng: " + profile.getTier() + " · Điểm thưởng: "
-                                    + value.getDiemHienCo() + " · Điểm tích lũy: " + value.getDiemTichLuy()),
+                                    + UiFormat.money(profile.getActualSpend()) + " đ · Hạng: " + profile.getTier()
+                                    + " · Điểm thưởng: " + UiFormat.money(value.getDiemHienCo())
+                                    + " · Điểm tích lũy: " + UiFormat.money(value.getDiemTichLuy())),
                             BorderLayout.NORTH);
-                    content.add(new JScrollPane(new JTable(history)), BorderLayout.CENTER);
-                    JOptionPane.showMessageDialog(CustomerPanel.this, content, "CRM",
-                            JOptionPane.INFORMATION_MESSAGE);
+                    JTable historyTable = new JTable(history);
+                    historyTable.getColumnModel().getColumn(3).setCellRenderer(UiFormat.moneyRenderer());
+                    JScrollPane historyScroll = new JScrollPane(historyTable);
+                    historyScroll.setPreferredSize(DialogActions.DETAIL_TABLE);
+                    content.add(historyScroll, BorderLayout.CENTER);
+                    DialogActions.info(CustomerPanel.this, content, "CRM");
                 } catch (Exception exception) {
-                    message("Không tải được hồ sơ khách hàng.");
+                    message("Không tải được hồ sơ khách hàng.", exception);
                 }
             }
         }.execute();
     }
 
     private void edit(KhachHang existing) {
-        JTextField id = new JTextField(existing == null ? "" : existing.getMaKhachHang());
+        if (existing != null) {
+            editForm(existing.getMaKhachHang(), existing);
+            return;
+        }
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return new MasterDataService().maKhachHangTiepTheo(actor);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    editForm(get(), null);
+                } catch (Exception exception) {
+                    message("Không tạo được mã khách hàng.", exception);
+                }
+            }
+        }.execute();
+    }
+
+    private void editForm(String generatedId, KhachHang existing) {
+        JTextField id = new JTextField(existing == null ? generatedId : existing.getMaKhachHang());
         JTextField name = new JTextField(existing == null ? "" : existing.getHoTen());
         JTextField phone = new JTextField(existing == null ? "" : existing.getSoDienThoai());
-        id.setEditable(existing == null);
-        JPanel form = new JPanel(new GridLayout(0, 1, 0, 4));
-        addField(form, "Mã", id);
-        addField(form, "Họ tên", name);
-        addField(form, "Điện thoại", phone);
-        if (!DialogActions.confirm(this, form, existing == null ? "Thêm khách hàng" : "Sửa khách hàng")) return;
+        id.setEditable(false);
+        FormValidator validator = new FormValidator();
+        JPanel form = FormValidator.form();
+        form.add(validator.row("Mã", id));
+        form.add(validator.row("Họ tên", name));
+        form.add(validator.row("Điện thoại", phone));
+        validator.require(name, "Họ tên khách hàng không được để trống.");
+        validator.matches(phone, "0[35789][0-9]{8}",
+                "Số điện thoại sai định dạng, phải có dạng 0xxxxxxxxx (10 số, ví dụ: 0901234567).");
+        if (!DialogActions.confirm(this, form, existing == null ? "Thêm khách hàng" : "Sửa khách hàng",
+                validator)) return;
         KhachHang value = new KhachHang();
         value.setMaKhachHang(id.getText().trim());
         value.setHoTen(name.getText().trim());
         value.setSoDienThoai(phone.getText().trim());
         value.setTrangThai(existing == null ? "HOAT_DONG" : existing.getTrangThai());
-        save(value);
+        save(value, existing == null);
     }
 
     private void toggle() {
         KhachHang value = selected();
         if (value == null) return;
-        value.setTrangThai("HOAT_DONG".equals(value.getTrangThai()) ? "NGUNG_HOAT_DONG" : "HOAT_DONG");
-        save(value);
+        String next = "HOAT_DONG".equals(value.getTrangThai()) ? "NGUNG_HOAT_DONG" : "HOAT_DONG";
+        if (JOptionPane.showConfirmDialog(this,
+                "Chuyển khách hàng sang trạng thái " + statusLabel(next)
+                        + "? Khách hàng sẽ không bán hàng được nữa nhưng hóa đơn cũ vẫn giữ nguyên.",
+                "Xác nhận", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION)
+            return;
+        value.setTrangThai(next);
+        save(value, false);
     }
 
-    private void save(final KhachHang value) {
+    private void save(final KhachHang value, final boolean isNew) {
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                new MasterDataService().luuKhachHang(actor, value);
+                MasterDataService service = new MasterDataService();
+                if (isNew) {
+                    for (KhachHang found : service.timKhachHang(actor, value.getMaKhachHang(), null))
+                        if (value.getMaKhachHang().equals(found.getMaKhachHang()))
+                            throw new IllegalArgumentException("Mã khách hàng đã tồn tại");
+                }
+                service.luuKhachHang(actor, value);
                 return null;
             }
 
@@ -196,37 +244,30 @@ public final class CustomerPanel extends JPanel {
                 try {
                     get();
                     load();
+                    message("Lưu khách hàng thành công.");
                 } catch (Exception exception) {
-                    message("Không lưu được khách hàng.");
+                    message("Không lưu được khách hàng.", exception);
                 }
             }
         }.execute();
     }
 
-    private void remove() {
-        final KhachHang value = selected();
-        if (value == null || JOptionPane.showConfirmDialog(this, "Xóa khách hàng?", "Xác nhận",
-                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
-        new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                new MasterDataService().xoaKhachHang(actor, value.getMaKhachHang());
-                return null;
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    get();
-                    load();
-                } catch (Exception exception) {
-                    message("Không thể xóa khách hàng có lịch sử.");
-                }
-            }
-        }.execute();
+    private static String statusLabel(String status) {
+        return "NGUNG_HOAT_DONG".equals(status) ? "Ngừng hoạt động" : "Đang hoạt động";
     }
 
     private void message(String text) {
-        JOptionPane.showMessageDialog(this, text);
+        JOptionPane.showMessageDialog(this, text, "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void message(String fallback, Exception exception) {
+        Throwable cause = exception;
+        while (cause.getCause() != null
+                && cause instanceof java.util.concurrent.ExecutionException)
+            cause = cause.getCause();
+        String text = cause instanceof IllegalArgumentException || cause instanceof IllegalStateException
+                ? cause.getMessage()
+                : fallback;
+        JOptionPane.showMessageDialog(this, text == null ? fallback : text, "Lỗi", JOptionPane.ERROR_MESSAGE);
     }
 }

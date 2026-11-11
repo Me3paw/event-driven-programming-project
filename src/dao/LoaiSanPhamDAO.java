@@ -10,9 +10,12 @@ import java.util.List;
 
 public class LoaiSanPhamDAO {
   public void save(LoaiSanPham value, Connection connection) throws SQLException {
-    String sql = "INSERT INTO LOAI_SAN_PHAM (ma_loai, ten_loai, mo_ta, trang_thai) VALUES (?, ?, "
-        + "?, ?) ON DUPLICATE KEY UPDATE ten_loai = VALUES(ten_loai), mo_ta = "
-        + "VALUES(mo_ta), trang_thai = VALUES(trang_thai)";
+    String sql = "MERGE LOAI_SAN_PHAM AS target USING (VALUES (?, ?, ?, ?)) AS source "
+        + "(ma_loai,ten_loai,mo_ta,trang_thai) ON target.ma_loai=source.ma_loai "
+        + "WHEN MATCHED THEN UPDATE SET ten_loai=source.ten_loai,mo_ta=source.mo_ta,"
+        + "trang_thai=source.trang_thai WHEN NOT MATCHED THEN INSERT "
+        + "(ma_loai,ten_loai,mo_ta,trang_thai) VALUES (source.ma_loai,source.ten_loai,"
+        + "source.mo_ta,source.trang_thai);";
     try (PreparedStatement s = connection.prepareStatement(sql)) {
       s.setString(1, value.getMaLoai());
       s.setString(2, value.getTenLoai());
@@ -41,6 +44,20 @@ public class LoaiSanPhamDAO {
       }
     }
     return values;
+  }
+  public String nextId(Connection connection) throws SQLException {
+    try (PreparedStatement s =
+             connection.prepareStatement("SELECT MAX(ma_loai) FROM LOAI_SAN_PHAM")) {
+      try (ResultSet r = s.executeQuery()) {
+        int next = 1;
+        if (r.next()) {
+          String max = r.getString(1);
+          if (max != null && max.matches("LSP[0-9]+"))
+            next = Integer.parseInt(max.substring(3)) + 1;
+        }
+        return String.format("LSP%03d", next);
+      }
+    }
   }
   public void delete(String maLoai, Connection connection) throws SQLException {
     try (PreparedStatement s =

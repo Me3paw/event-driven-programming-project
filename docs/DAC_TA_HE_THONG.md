@@ -132,7 +132,7 @@ Sơ đồ lớp PlantUML được lưu cùng tài liệu trong `docs/`; sơ đ�
 
 | Nhóm | Lớp/chức năng chính | Ràng buộc |
 |---|---|---|
-| `entity` | `NhanVien`, `TaiKhoan`, `LoaiSanPham`, `SanPham`, `KhachHang`, `NhaCungCap`, `PhieuNhap`, `ChiTietPhieuNhap`, `LoTonKho`, `DieuChinhTon`, `ChiTietDieuChinh`, `HoaDon`, `ChiTietHoaDon`, `PhanBoXuatLo`, `KhuyenMai`, `KhuyenMaiSanPham`, `CauHinhCuaHang` | Entity biểu diễn dữ liệu; không chứa JDBC hay điều khiển Swing. |
+| `entity` | `NhanVien`, `TaiKhoan`, `LoaiSanPham`, `SanPham`, `KhachHang`, `NhaCungCap`, `PhieuNhap`, `ChiTietPhieuNhap`, `LoTonKho`, `PhieuDieuChinhTon`, `ChiTietPhieuDieuChinh`, `HoaDon`, `ChiTietHoaDon`, `PhanBoXuatLo`, `KhuyenMai`, `KhuyenMaiSanPham`, `CauHinhCuaHang` | Entity biểu diễn dữ liệu; không chứa JDBC hay điều khiển Swing. |
 | `dao` | DAO tương ứng với entity và truy vấn báo cáo | Chỉ thực hiện SQL/ánh xạ kết quả; nhận `Connection` do service truyền khi nằm trong transaction. |
 | `service` | `AuthService`, `MasterDataService`, `PurchaseService`, `InventoryService`, `PromotionService`, `SaleService`, `ReportService`, `SettingsService` | Kiểm tra quyền, dữ liệu, điều phối DAO và sở hữu transaction. |
 | `graphicUI` | Đăng nhập, dashboard, danh mục, nhập hàng, điều chỉnh tồn, bán hàng, hóa đơn, khuyến mãi, báo cáo, cấu hình | Không gọi DAO trực tiếp; chỉ lấy dữ liệu từ service. |
@@ -165,7 +165,7 @@ ERD PlantUML được lưu cùng tài liệu trong `docs/`. Lược đồ có đ
 | Nhóm | Bảng | Mục đích |
 |---|---|---|
 | Danh mục/cấu hình | `NHAN_VIEN`, `TAI_KHOAN`, `LOAI_SAN_PHAM`, `SAN_PHAM`, `KHACH_HANG`, `NHA_CUNG_CAP`, `CAU_HINH_CUA_HANG` | Nhân sự, tài khoản, hàng hóa, khách và cấu hình VAT/thông tin cửa hàng. |
-| Nhập/tồn | `PHIEU_NHAP`, `CHI_TIET_PHIEU_NHAP`, `LO_TON_KHO`, `DIEU_CHINH_TON`, `CHI_TIET_DIEU_CHINH` | Chứng từ nhập, lô FIFO và điều chỉnh giảm. |
+| Nhập/tồn | `PHIEU_NHAP`, `CHI_TIET_PHIEU_NHAP`, `LO_TON_KHO`, `PHIEU_DIEU_CHINH_TON`, `CHI_TIET_PHIEU_DIEU_CHINH` | Chứng từ nhập, lô FIFO và điều chỉnh giảm. |
 | Bán hàng | `HOA_DON`, `CHI_TIET_HOA_DON`, `PHAN_BO_XUAT_LO` | Hóa đơn, dòng hàng và nguồn lô thực tế. |
 | Khuyến mãi | `KHUYEN_MAI`, `KHUYEN_MAI_SAN_PHAM` | Sự kiện giảm giá và phạm vi sản phẩm. |
 
@@ -183,8 +183,8 @@ ERD PlantUML được lưu cùng tài liệu trong `docs/`. Lược đồ có đ
 | `PHIEU_NHAP` | `ma_phieu_nhap` PK; FK nhà cung cấp, nhân viên | Trạng thái `NHAP`/`HOAN_TAT`; chỉ hoàn tất mới tạo lô. |
 | `CHI_TIET_PHIEU_NHAP` | PK ghép phiếu/sản phẩm; FK phiếu, sản phẩm | Số lượng lớn hơn 0, đơn giá nhập không âm. |
 | `LO_TON_KHO` | `ma_lo` PK; FK chi tiết nhập, sản phẩm | Số lượng ban đầu lớn hơn 0; `so_luong_con` từ 0 đến số lượng ban đầu; ngày tạo xác định FIFO. |
-| `DIEU_CHINH_TON` | `ma_dieu_chinh` PK; FK nhân viên | Lý do, thời điểm và người quản lý thực hiện bắt buộc. |
-| `CHI_TIET_DIEU_CHINH` | PK ghép điều chỉnh/lô; FK điều chỉnh, lô | Chỉ số lượng giảm, lớn hơn 0. |
+| `PHIEU_DIEU_CHINH_TON` | `ma_dieu_chinh` PK; FK nhân viên | Lý do, thời điểm và người quản lý thực hiện bắt buộc. |
+| `CHI_TIET_PHIEU_DIEU_CHINH` | PK ghép điều chỉnh/lô; FK điều chỉnh, lô | Chỉ số lượng giảm, lớn hơn 0. |
 | `HOA_DON` | `ma_hoa_don` PK; FK nhân viên, khách hàng tùy chọn | Thời điểm, trạng thái, phương thức; lưu tổng giá gốc, loại/mức giảm, điểm thưởng dùng, VAT 0–100%, tổng thanh toán, tiền nhận/thừa hoặc mã tham chiếu thanh toán, điểm tích lũy kiếm, điểm thưởng kiếm và dữ liệu hủy. |
 | `CHI_TIET_HOA_DON` | PK ghép hóa đơn/sản phẩm; FK hóa đơn, sản phẩm | Số lượng lớn hơn 0; lưu ảnh chụp đơn giá bán, giảm giá dòng và thành tiền, không lưu giá vốn. |
 | `PHAN_BO_XUAT_LO` | PK ghép chi tiết hóa đơn/lô; FK chi tiết hóa đơn, lô | Số lượng xuất lớn hơn 0; lưu `don_gia_von` là ảnh chụp giá vốn lô để tính giá vốn và phục hồi đúng lô khi hủy. |

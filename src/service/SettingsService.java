@@ -27,11 +27,23 @@ public class SettingsService {
     }
   }
   private void luu(CauHinhCuaHang value) throws SQLException {
+    if (value == null)
+      throw new IllegalArgumentException("Thiếu cấu hình cửa hàng");
+    if (blank(value.getTenCuaHang()) || value.getTenCuaHang().trim().length() > 100)
+      throw new IllegalArgumentException("Tên cửa hàng phải từ 1 đến 100 ký tự");
+    if (blank(value.getDiaChi()) || value.getDiaChi().trim().length() > 255)
+      throw new IllegalArgumentException("Địa chỉ phải từ 1 đến 255 ký tự");
+    if (blank(value.getSoDienThoai())
+        || !value.getSoDienThoai().trim().matches(ValidationRules.STORE_PHONE))
+      throw new IllegalArgumentException("Số điện thoại không hợp lệ");
     BigDecimal rate = value.getTyLeVat();
     if (rate == null || rate.signum() < 0 || rate.compareTo(new BigDecimal("100")) > 0)
       throw new IllegalArgumentException("VAT không hợp lệ");
     try (Connection c = DBConnection.open()) {
       dao.save(value, c);
     }
+  }
+  private boolean blank(String value) {
+    return value == null || value.trim().isEmpty();
   }
 }

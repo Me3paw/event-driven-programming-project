@@ -6,6 +6,9 @@ public class TaiKhoan {
   private String vaiTro;
   private String trangThai;
   private String maNhanVien;
+  private String trangThaiNhanVien;
+  private String tenNhanVien;
+  private String chucVuNhanVien;
 
   public String getTenDangNhap() {
     return tenDangNhap;
@@ -36,5 +39,23 @@ public class TaiKhoan {
   }
   public void setMaNhanVien(String maNhanVien) {
     this.maNhanVien = maNhanVien;
+  }
+  public String getTrangThaiNhanVien() {
+    return trangThaiNhanVien;
+  }
+  public void setTrangThaiNhanVien(String trangThaiNhanVien) {
+    this.trangThaiNhanVien = trangThaiNhanVien;
+  }
+  public String getTenNhanVien() {
+    return tenNhanVien;
+  }
+  public void setTenNhanVien(String tenNhanVien) {
+    this.tenNhanVien = tenNhanVien;
+  }
+  public String getChucVuNhanVien() {
+    return chucVuNhanVien;
+  }
+  public void setChucVuNhanVien(String chucVuNhanVien) {
+    this.chucVuNhanVien = chucVuNhanVien;
   }
 }

@@ -20,6 +20,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import service.Actor;
 import service.AuthService;
 import service.DongThanhToan;
@@ -31,7 +32,12 @@ import service.SaleService;
 import service.YeuCauThanhToan;
 
 public final class BackendTransactionSmoke {
+  private static final AtomicInteger BARCODE = new AtomicInteger();
   private BackendTransactionSmoke() {}
+
+  private static String barcode() {
+    return "893" + String.format("%09d", BARCODE.incrementAndGet());
+  }
 
   public static void main(String[] args) throws Exception {
     AuthService auth = new AuthService();
@@ -49,7 +55,7 @@ public final class BackendTransactionSmoke {
   }
 
   private static void discount(Actor manager, String token) throws Exception {
-    String first = "D1" + token, second = "D2" + token, promotion = "K" + token;
+    String first = barcode(), second = barcode(), promotion = "K" + token;
     product(first, BigDecimal.valueOf(5));
     product(second, BigDecimal.valueOf(5));
     stock(first, 1, token);
@@ -95,7 +101,7 @@ public final class BackendTransactionSmoke {
   }
 
   private static void fifoCompletion(Actor manager, String token) throws Exception {
-    String product = "F" + token, oldId = "O" + token, newId = "N" + token;
+    String product = barcode(), oldId = "O" + token, newId = "N" + token;
     product(product, BigDecimal.ONE);
     PurchaseService purchases = new PurchaseService();
     purchases.luuNhap(manager, purchase(oldId, product, LocalDateTime.now().minusDays(2)));
@@ -110,7 +116,7 @@ public final class BackendTransactionSmoke {
 
   private static void concurrency(final Actor manager, final Actor cashier, String token)
       throws Exception {
-    final String product = "C" + token;
+    final String product = barcode();
     product(product, BigDecimal.ONE);
     stock(product, 95, token);
     final SaleService sales = new SaleService();

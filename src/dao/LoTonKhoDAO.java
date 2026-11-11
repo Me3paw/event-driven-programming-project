@@ -13,9 +13,9 @@ public class LoTonKhoDAO {
   public List<LoTonKho> lockFifo(String maSanPham, Connection c) throws SQLException {
     String sql = "SELECT "
         + "l.ma_lo,l.ma_phieu_nhap,l.ma_san_pham,l.so_luong_nhap,l.so_luong_con,l.thoi_diem_nhap,p."
-        + "don_gia_nhap FROM LO_TON_KHO l JOIN CHI_TIET_PHIEU_NHAP p ON "
+        + "don_gia_nhap FROM LO_TON_KHO l WITH (UPDLOCK, ROWLOCK) JOIN CHI_TIET_PHIEU_NHAP p ON "
         + "p.ma_phieu_nhap=l.ma_phieu_nhap AND p.ma_san_pham=l.ma_san_pham WHERE l.ma_san_pham=? "
-        + "AND l.so_luong_con>0 ORDER BY l.thoi_diem_nhap,l.ma_lo FOR UPDATE";
+        + "AND l.so_luong_con>0 ORDER BY l.thoi_diem_nhap,l.ma_lo";
     List<LoTonKho> values = new ArrayList<LoTonKho>();
     try (PreparedStatement s = c.prepareStatement(sql)) {
       s.setString(1, maSanPham);

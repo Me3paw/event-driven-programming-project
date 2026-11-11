@@ -58,12 +58,40 @@ public class MasterDataService {
     Access.manager(a);
     luuNhaCungCap(v);
   }
+  public String maNhanVienTiepTheo(Actor a) throws SQLException {
+    Access.manager(a);
+    try (Connection c = DBConnection.open()) {
+      return nhanVienDAO.nextId(c);
+    }
+  }
+  public String maNhaCungCapTiepTheo(Actor a) throws SQLException {
+    Access.manager(a);
+    try (Connection c = DBConnection.open()) {
+      return nhaCungCapDAO.nextId(c);
+    }
+  }
+  public String maKhachHangTiepTheo(Actor a) throws SQLException {
+    Access.actor(a);
+    try (Connection c = DBConnection.open()) {
+      return khachHangDAO.nextId(c);
+    }
+  }
+  public String maLoaiTiepTheo(Actor a) throws SQLException {
+    Access.manager(a);
+    try (Connection c = DBConnection.open()) {
+      return loaiDAO.nextId(c);
+    }
+  }
   public List<NhanVien> timNhanVien(Actor a, String k, String s) throws SQLException {
+    return timNhanVien(a, k, s, null);
+  }
+  public List<NhanVien> timNhanVien(Actor a, String k, String s, String chucVu)
+      throws SQLException {
     Access.manager(a);
     String trangThai = Access.blankToNull(s);
     if (trangThai != null && !Access.is(trangThai, TrangThaiNhanVien.class))
       throw new IllegalArgumentException("Trạng thái nhân viên không hợp lệ");
-    return timNhanVien(Access.blankToNull(k), trangThai);
+    return timNhanVien(Access.blankToNull(k), trangThai, Access.blankToNull(chucVu));
   }
   public List<TaiKhoan> timTaiKhoan(Actor a, String k, String r, String s) throws SQLException {
     Access.manager(a);
@@ -113,16 +141,22 @@ public class MasterDataService {
     }
   }
   public List<NhaCungCap> timNhaCungCap(Actor a, String k) throws SQLException {
+    return timNhaCungCap(a, k, null);
+  }
+  public List<NhaCungCap> timNhaCungCap(Actor a, String k, String s) throws SQLException {
     Access.manager(a);
-    return timNhaCungCap(Access.blankToNull(k));
+    String status = Access.blankToNull(s);
+    if (status != null && !Access.is(status, TrangThaiHoatDong.class))
+      throw new IllegalArgumentException("Trạng thái nhà cung cấp không hợp lệ");
+    return timNhaCungCap(Access.blankToNull(k), status);
   }
   public void xoaNhanVien(Actor a, String id) throws SQLException {
     Access.manager(a);
-    xoaNhanVien(id);
+    throw new IllegalStateException("Không xóa nhân viên; hãy đổi trạng thái nhân viên");
   }
   public void xoaTaiKhoan(Actor a, String id) throws SQLException {
     Access.manager(a);
-    xoaTaiKhoan(id);
+    throw new IllegalStateException("Không xóa tài khoản; hãy đổi trạng thái tài khoản");
   }
   public void xoaLoai(Actor a, String id) throws SQLException {
     Access.manager(a);
@@ -134,11 +168,11 @@ public class MasterDataService {
   }
   public void xoaKhachHang(Actor a, String id) throws SQLException {
     Access.actor(a);
-    xoaKhachHang(id);
+    throw new IllegalStateException("Không xóa khách hàng; hãy đổi trạng thái khách hàng");
   }
   public void xoaNhaCungCap(Actor a, String id) throws SQLException {
     Access.manager(a);
-    xoaNhaCungCap(id);
+    throw new IllegalStateException("Không xóa nhà cung cấp; hãy đổi trạng thái nhà cung cấp");
   }
   public void capNhatTrangThaiNhanVien(Actor a, String id, String s) throws SQLException {
     Access.manager(a);
@@ -151,9 +185,9 @@ public class MasterDataService {
   private void luuNhanVien(NhanVien v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu nhân viên");
-    v.setMaNhanVien(required(v.getMaNhanVien(), "Mã nhân viên", 20));
-    v.setHoTen(required(v.getHoTen(), "Họ tên nhân viên", 100));
-    v.setSoDienThoai(phone(v.getSoDienThoai(), "Số điện thoại nhân viên"));
+    v.setMaNhanVien(code(v.getMaNhanVien(), "Mã nhân viên", ValidationRules.EMPLOYEE_ID, "NV001"));
+    v.setHoTen(personName(v.getHoTen(), "Họ tên nhân viên"));
+    v.setSoDienThoai(vnPhone(v.getSoDienThoai(), "Số điện thoại nhân viên"));
     v.setChucVu(optional(v.getChucVu(), "Chức vụ", 30));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiNhanVien.class, "Trạng thái nhân viên"));
     try (Connection c = DBConnection.open()) {
@@ -164,7 +198,7 @@ public class MasterDataService {
     if (v == null)
       throw new IllegalArgumentException("Thiếu tài khoản");
     v.setTenDangNhap(required(v.getTenDangNhap(), "Tên đăng nhập", 50));
-    v.setMaNhanVien(required(v.getMaNhanVien(), "Mã nhân viên", 20));
+    v.setMaNhanVien(code(v.getMaNhanVien(), "Mã nhân viên", ValidationRules.EMPLOYEE_ID, "NV001"));
     v.setVaiTro(enumValue(v.getVaiTro(), VaiTro.class, "Vai trò"));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiTaiKhoan.class, "Trạng thái tài khoản"));
     try (Connection c = DBConnection.open()) {
@@ -184,7 +218,7 @@ public class MasterDataService {
   private void luuLoai(LoaiSanPham v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu loại sản phẩm");
-    v.setMaLoai(required(v.getMaLoai(), "Mã loại", 20));
+    v.setMaLoai(code(v.getMaLoai(), "Mã loại", ValidationRules.CATEGORY_ID, "LSP001"));
     v.setTenLoai(required(v.getTenLoai(), "Tên loại", 100));
     v.setMoTa(optional(v.getMoTa(), "Mô tả", 255));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiSanPham.class, "Trạng thái loại"));
@@ -195,12 +229,12 @@ public class MasterDataService {
   private void luuSanPham(SanPham v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu sản phẩm");
-    v.setMaSanPham(required(v.getMaSanPham(), "Mã sản phẩm", 20));
-    v.setMaLoai(required(v.getMaLoai(), "Mã loại", 20));
+    v.setMaSanPham(code(v.getMaSanPham(), "Mã sản phẩm", ValidationRules.PRODUCT_ID, "893000000001"));
+    v.setMaLoai(code(v.getMaLoai(), "Mã loại", ValidationRules.CATEGORY_ID, "LSP001"));
     v.setTenSanPham(required(v.getTenSanPham(), "Tên sản phẩm", 150));
     v.setDonViTinh(required(v.getDonViTinh(), "Đơn vị tính", 30));
-    if (v.getGiaBan() == null || v.getGiaBan().signum() < 0)
-      throw new IllegalArgumentException("Giá bán không được âm");
+    if (v.getGiaBan() == null || v.getGiaBan().signum() <= 0)
+      throw new IllegalArgumentException("Giá bán phải lớn hơn 0");
     if (v.getNguongTon() < 0)
       throw new IllegalArgumentException("Ngưỡng tồn không được âm");
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiSanPham.class, "Trạng thái sản phẩm"));
@@ -211,9 +245,9 @@ public class MasterDataService {
   private void luuKhachHang(KhachHang v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu khách hàng");
-    v.setMaKhachHang(required(v.getMaKhachHang(), "Mã khách hàng", 20));
-    v.setHoTen(required(v.getHoTen(), "Họ tên khách hàng", 100));
-    v.setSoDienThoai(phone(v.getSoDienThoai(), "Số điện thoại khách hàng"));
+    v.setMaKhachHang(code(v.getMaKhachHang(), "Mã khách hàng", ValidationRules.CUSTOMER_ID, "KH001"));
+    v.setHoTen(personName(v.getHoTen(), "Họ tên khách hàng"));
+    v.setSoDienThoai(vnPhone(v.getSoDienThoai(), "Số điện thoại khách hàng"));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiHoatDong.class, "Trạng thái khách hàng"));
     try (Connection c = DBConnection.open()) {
       khachHangDAO.save(v, c);
@@ -222,7 +256,7 @@ public class MasterDataService {
   private void luuNhaCungCap(NhaCungCap v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu nhà cung cấp");
-    v.setMaNhaCungCap(required(v.getMaNhaCungCap(), "Mã nhà cung cấp", 20));
+    v.setMaNhaCungCap(code(v.getMaNhaCungCap(), "Mã nhà cung cấp", ValidationRules.SUPPLIER_ID, "NCC001"));
     v.setTenNhaCungCap(required(v.getTenNhaCungCap(), "Tên nhà cung cấp", 150));
     v.setSoDienThoai(phone(v.getSoDienThoai(), "Số điện thoại nhà cung cấp"));
     v.setDiaChi(optional(v.getDiaChi(), "Địa chỉ", 255));
@@ -231,9 +265,10 @@ public class MasterDataService {
       nhaCungCapDAO.save(v, c);
     }
   }
-  private List<NhanVien> timNhanVien(String keyword, String trangThai) throws SQLException {
+  private List<NhanVien> timNhanVien(String keyword, String trangThai, String chucVu)
+      throws SQLException {
     try (Connection c = DBConnection.open()) {
-      return nhanVienDAO.search(keyword, trangThai, c);
+      return nhanVienDAO.search(keyword, trangThai, chucVu, c);
     }
   }
   private List<TaiKhoan> timTaiKhoan(String keyword, String vaiTro, String trangThai)
@@ -258,9 +293,9 @@ public class MasterDataService {
       return khachHangDAO.search(keyword, trangThai, c);
     }
   }
-  private List<NhaCungCap> timNhaCungCap(String keyword) throws SQLException {
+  private List<NhaCungCap> timNhaCungCap(String keyword, String trangThai) throws SQLException {
     try (Connection c = DBConnection.open()) {
-      return nhaCungCapDAO.search(keyword, c);
+      return nhaCungCapDAO.search(keyword, trangThai, c);
     }
   }
   private void xoaNhanVien(String id) throws SQLException {
@@ -327,10 +362,28 @@ public class MasterDataService {
       throw new IllegalArgumentException(label + " quá dài");
     return trimmed;
   }
+  private String code(String value, String label, String regex, String example) {
+    String trimmed = required(value, label, 20);
+    if (!ValidationRules.matches(trimmed, regex))
+      throw new IllegalArgumentException(label + " sai định dạng, phải có dạng " + example);
+    return trimmed;
+  }
   private String phone(String value, String label) {
     String trimmed = optional(value, label, 20);
-    if (trimmed != null && !trimmed.matches("\\+?[0-9][0-9 .()\\-]{5,19}"))
-      throw new IllegalArgumentException(label + " không hợp lệ");
+    if (trimmed != null && !trimmed.matches(ValidationRules.PHONE))
+      throw new IllegalArgumentException(label + " không hợp lệ, chỉ gồm số, dấu +, khoảng trắng, (), . và -");
+    return trimmed;
+  }
+  private String vnPhone(String value, String label) {
+    String trimmed = optional(value, label, 20);
+    if (trimmed != null && !ValidationRules.matches(trimmed, ValidationRules.VN_PHONE))
+      throw new IllegalArgumentException(label + " sai định dạng, phải có dạng 0xxxxxxxxx (10 số, đầu số 3/5/7/8/9, ví dụ: 0901234567)");
+    return trimmed;
+  }
+  private String personName(String value, String label) {
+    String trimmed = required(value, label, 100);
+    if (!ValidationRules.matches(trimmed, ValidationRules.PERSON_NAME))
+      throw new IllegalArgumentException(label + " sai định dạng, chỉ được chứa chữ cái và khoảng trắng (ví dụ: Nguyen Van A)");
     return trimmed;
   }
   private <E extends Enum<E>> String enumValue(String value, Class<E> type, String label) {

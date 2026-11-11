@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class DieuChinhTon {
+public class PhieuDieuChinhTon {
   private String maDieuChinh;
   private String maNhanVien;
   private LocalDateTime thoiDiemLap;

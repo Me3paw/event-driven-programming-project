@@ -61,19 +61,24 @@ public class KhuyenMaiDAO {
     return out;
   }
   public void save(KhuyenMai v, Connection c) throws SQLException {
-    String q = "INSERT INTO KHUYEN_MAI "
-        + "(ma_khuyen_mai,ten_khuyen_mai,pham_vi,ty_le_giam,bat_dau,ket_thuc,trang_thai) VALUES "
-        + "(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE "
-        + "ten_khuyen_mai=VALUES(ten_khuyen_mai),pham_vi=VALUES(pham_vi),ty_le_giam=VALUES(ty_le_"
-        + "giam),bat_dau=VALUES(bat_dau),ket_thuc=VALUES(ket_thuc),trang_thai=VALUES(trang_thai)";
+    String q = "MERGE KHUYEN_MAI AS target USING (VALUES (?,?,?,?,?,?,?,?)) AS source "
+        + "(ma_khuyen_mai,ten_khuyen_mai,pham_vi,ty_le_giam,don_toi_thieu,bat_dau,ket_thuc,trang_thai) "
+        + "ON target.ma_khuyen_mai=source.ma_khuyen_mai WHEN MATCHED THEN UPDATE SET "
+        + "ten_khuyen_mai=source.ten_khuyen_mai,pham_vi=source.pham_vi,"
+        + "ty_le_giam=source.ty_le_giam,don_toi_thieu=source.don_toi_thieu,bat_dau=source.bat_dau,ket_thuc=source.ket_thuc,"
+        + "trang_thai=source.trang_thai WHEN NOT MATCHED THEN INSERT "
+        + "(ma_khuyen_mai,ten_khuyen_mai,pham_vi,ty_le_giam,don_toi_thieu,bat_dau,ket_thuc,trang_thai) VALUES "
+        + "(source.ma_khuyen_mai,source.ten_khuyen_mai,source.pham_vi,source.ty_le_giam,source.don_toi_thieu,"
+        + "source.bat_dau,source.ket_thuc,source.trang_thai);";
     try (PreparedStatement s = c.prepareStatement(q)) {
       s.setString(1, v.getMaKhuyenMai());
       s.setString(2, v.getTenKhuyenMai());
       s.setString(3, v.getPhamVi());
       s.setBigDecimal(4, v.getTyLeGiam());
-      s.setTimestamp(5, Timestamp.valueOf(v.getBatDau()));
-      s.setTimestamp(6, Timestamp.valueOf(v.getKetThuc()));
-      s.setString(7, v.getTrangThai());
+      s.setBigDecimal(5, v.getDonToiThieu());
+      s.setTimestamp(6, Timestamp.valueOf(v.getBatDau()));
+      s.setTimestamp(7, Timestamp.valueOf(v.getKetThuc()));
+      s.setString(8, v.getTrangThai());
       s.executeUpdate();
     }
     try (PreparedStatement d =
@@ -114,6 +119,19 @@ public class KhuyenMaiDAO {
     }
     return out;
   }
+  public String nextId(Connection c) throws SQLException {
+    try (PreparedStatement s = c.prepareStatement("SELECT MAX(ma_khuyen_mai) FROM KHUYEN_MAI")) {
+      try (ResultSet r = s.executeQuery()) {
+        int next = 1;
+        if (r.next()) {
+          String max = r.getString(1);
+          if (max != null && max.matches("KM[0-9]{3}"))
+            next = Integer.parseInt(max.substring(2)) + 1;
+        }
+        return String.format("KM%03d", next);
+      }
+    }
+  }
   public void updateStatus(String maKhuyenMai, String trangThai, Connection c) throws SQLException {
     try (PreparedStatement s =
              c.prepareStatement("UPDATE KHUYEN_MAI SET trang_thai=? WHERE ma_khuyen_mai=?")) {
@@ -125,7 +143,7 @@ public class KhuyenMaiDAO {
   }
   public boolean referenced(String maKhuyenMai, Connection c) throws SQLException {
     try (PreparedStatement s =
-             c.prepareStatement("SELECT 1 FROM HOA_DON WHERE ma_khuyen_mai=? LIMIT 1")) {
+             c.prepareStatement("SELECT TOP 1 1 FROM HOA_DON WHERE ma_khuyen_mai=?")) {
       s.setString(1, maKhuyenMai);
       try (ResultSet r = s.executeQuery()) {
         return r.next();
@@ -159,6 +177,7 @@ public class KhuyenMaiDAO {
     v.setTenKhuyenMai(r.getString("ten_khuyen_mai"));
     v.setPhamVi(r.getString("pham_vi"));
     v.setTyLeGiam(r.getBigDecimal("ty_le_giam"));
+    v.setDonToiThieu(r.getBigDecimal("don_toi_thieu"));
     v.setBatDau(r.getTimestamp("bat_dau").toLocalDateTime());
     v.setKetThuc(r.getTimestamp("ket_thuc").toLocalDateTime());
     v.setTrangThai(r.getString("trang_thai"));

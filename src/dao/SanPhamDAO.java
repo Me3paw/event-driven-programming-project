@@ -11,11 +11,15 @@ import java.util.List;
 
 public class SanPhamDAO {
   public void save(SanPham value, Connection connection) throws SQLException {
-    String sql = "INSERT INTO SAN_PHAM (ma_san_pham, ma_loai, ten_san_pham, don_vi_tinh, gia_ban, "
-        + "nguong_ton, trang_thai) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE "
-        + "ma_loai = VALUES(ma_loai), ten_san_pham = VALUES(ten_san_pham), don_vi_tinh = "
-        + "VALUES(don_vi_tinh), gia_ban = VALUES(gia_ban), nguong_ton = "
-        + "VALUES(nguong_ton), trang_thai = VALUES(trang_thai)";
+    String sql = "MERGE SAN_PHAM AS target USING (VALUES (?, ?, ?, ?, ?, ?, ?)) AS source "
+        + "(ma_san_pham, ma_loai, ten_san_pham, don_vi_tinh, gia_ban, nguong_ton, trang_thai) "
+        + "ON target.ma_san_pham = source.ma_san_pham WHEN MATCHED THEN UPDATE SET "
+        + "ma_loai=source.ma_loai, ten_san_pham=source.ten_san_pham, "
+        + "don_vi_tinh=source.don_vi_tinh, gia_ban=source.gia_ban, nguong_ton=source.nguong_ton, "
+        + "trang_thai=source.trang_thai WHEN NOT MATCHED THEN INSERT "
+        + "(ma_san_pham,ma_loai,ten_san_pham,don_vi_tinh,gia_ban,nguong_ton,trang_thai) "
+        + "VALUES (source.ma_san_pham,source.ma_loai,source.ten_san_pham,source.don_vi_tinh,"
+        + "source.gia_ban,source.nguong_ton,source.trang_thai);";
     try (PreparedStatement s = connection.prepareStatement(sql)) {
       s.setString(1, value.getMaSanPham());
       s.setString(2, value.getMaLoai());

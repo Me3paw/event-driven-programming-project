@@ -17,16 +17,20 @@ public class PhieuNhapDAO {
   public void saveDraft(PhieuNhap p, Connection c) throws SQLException {
     BigDecimal total = BigDecimal.ZERO;
     for (ChiTietPhieuNhap d : p.getChiTiet()) {
-      if (d.getSoLuong() <= 0 || d.getDonGiaNhap().signum() < 0)
+      if (d == null || d.getMaSanPham() == null || d.getMaSanPham().trim().isEmpty()
+          || d.getDonGiaNhap() == null || d.getSoLuong() <= 0 || d.getDonGiaNhap().signum() <= 0)
         throw new IllegalArgumentException("Chi tiết nhập không hợp lệ");
       total = total.add(d.getDonGiaNhap().multiply(BigDecimal.valueOf(d.getSoLuong())));
     }
     p.setTongTien(total);
-    String q = "INSERT INTO PHIEU_NHAP "
+    String q = "MERGE PHIEU_NHAP AS target USING (VALUES (?,?,?,?,?)) AS source "
+        + "(ma_phieu_nhap,ma_nha_cung_cap,ma_nhan_vien,thoi_diem_lap,tong_tien) "
+        + "ON target.ma_phieu_nhap=source.ma_phieu_nhap WHEN MATCHED THEN UPDATE SET "
+        + "ma_nha_cung_cap=source.ma_nha_cung_cap,ma_nhan_vien=source.ma_nhan_vien,"
+        + "tong_tien=source.tong_tien WHEN NOT MATCHED THEN INSERT "
         + "(ma_phieu_nhap,ma_nha_cung_cap,ma_nhan_vien,thoi_diem_lap,trang_thai,tong_tien) "
-        + "VALUES (?,?,?,?, 'NHAP',?) ON DUPLICATE KEY UPDATE "
-        + "ma_nha_cung_cap=VALUES(ma_nha_cung_cap),ma_nhan_vien=VALUES(ma_nhan_vien),tong_"
-        + "tien=VALUES(tong_tien)";
+        + "VALUES (source.ma_phieu_nhap,source.ma_nha_cung_cap,source.ma_nhan_vien,"
+        + "source.thoi_diem_lap,'NHAP',source.tong_tien);";
     try (PreparedStatement s = c.prepareStatement(q)) {
       s.setString(1, p.getMaPhieuNhap());
       s.setString(2, p.getMaNhaCungCap());
@@ -56,7 +60,7 @@ public class PhieuNhapDAO {
   }
   public PhieuNhap lock(String id, Connection c) throws SQLException {
     try (PreparedStatement s =
-             c.prepareStatement("SELECT * FROM PHIEU_NHAP WHERE ma_phieu_nhap=? FOR UPDATE")) {
+             c.prepareStatement("SELECT * FROM PHIEU_NHAP WITH (UPDLOCK, ROWLOCK) WHERE ma_phieu_nhap=?")) {
       s.setString(1, id);
       try (ResultSet r = s.executeQuery()) {
         if (!r.next())
@@ -129,6 +133,19 @@ public class PhieuNhapDAO {
     try (PreparedStatement s = c.prepareStatement("DELETE FROM PHIEU_NHAP WHERE ma_phieu_nhap=?")) {
       s.setString(1, id);
       s.executeUpdate();
+    }
+  }
+  public String nextId(Connection c) throws SQLException {
+    try (PreparedStatement s = c.prepareStatement("SELECT MAX(ma_phieu_nhap) FROM PHIEU_NHAP")) {
+      try (ResultSet r = s.executeQuery()) {
+        int next = 1;
+        if (r.next()) {
+          String max = r.getString(1);
+          if (max != null && max.matches("PN[0-9]+"))
+            next = Integer.parseInt(max.substring(2)) + 1;
+        }
+        return String.format("PN%03d", next);
+      }
     }
   }
   public List<PhieuNhap> search(String keyword, String trangThai, Connection c)

@@ -24,7 +24,6 @@ public final class DBConnection {
             }
             return 3;
     } catch (SQLException exception) {
-        exception.printStackTrace();
         return 4;
     }
     }
@@ -33,10 +32,12 @@ public final class DBConnection {
         String url = required("POS_DB_URL");
         String user = required("POS_DB_USER");
         String password = required("POS_DB_PASSWORD");
-        if (url == null || user == null || password == null) {
+        if (url == null || user == null || password == null
+                || !url.regionMatches(true, 0, "jdbc:", 0, 5)) {
             throw new SQLException("Thiếu cấu hình kết nối cơ sở dữ liệu");
         }
-        return DriverManager.getConnection(url, user, password);
+        Connection connection = DriverManager.getConnection(url, user, password);
+        return connection;
     }
 
     public static boolean configured() {

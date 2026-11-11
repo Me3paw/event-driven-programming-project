@@ -1,6 +1,7 @@
 package graphicUI;
 
 import components.BarChart;
+import components.UiFormat;
 import entity.KhachHang;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
@@ -66,8 +67,8 @@ public final class ReportPanel extends JPanel {
     }
 
     private final Actor actor;
-    private final JTextField from = new JTextField(LocalDate.now().minusDays(6).toString(), 10);
-    private final JTextField to = new JTextField(LocalDate.now().toString(), 10);
+    private final DateField from = new DateField();
+    private final DateField to = new DateField();
     private final JComboBox<String> customerTier = new JComboBox<String>(
             new String[] {ALL_TIERS, "CHUA_XEP_HANG", "DONG", "BAC", "VANG"});
     private final JLabel kpi = new JLabel();
@@ -82,18 +83,24 @@ public final class ReportPanel extends JPanel {
     public ReportPanel(Actor actor) {
         super(new BorderLayout(0, 8));
         this.actor = actor;
+        from.setDate(LocalDate.now().minusDays(6));
+        to.setDate(LocalDate.now());
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        addField(controls, "Từ ngày (yyyy-MM-dd)", from);
-        addField(controls, "Đến ngày (yyyy-MM-dd)", to);
+        addField(controls, "Từ ngày", from);
+        addField(controls, "Đến ngày", to);
         addField(controls, "Hạng khách", customerTier);
         JButton load = new JButton("Tải báo cáo");
         load.addActionListener(event -> load());
         controls.add(load);
         add(controls, BorderLayout.NORTH);
 
+        JTable dailyTable = new JTable(daily);
+        dailyTable.getColumnModel().getColumn(1).setCellRenderer(UiFormat.moneyRenderer());
+        JTable topTable = new JTable(top);
+        topTable.getColumnModel().getColumn(3).setCellRenderer(UiFormat.moneyRenderer());
         JTabbedPane tabs = new JTabbedPane();
-        tabs.add("Doanh thu ngày", new JScrollPane(new JTable(daily)));
-        tabs.add("Bán chạy", new JScrollPane(new JTable(top)));
+        tabs.add("Doanh thu ngày", new JScrollPane(dailyTable));
+        tabs.add("Bán chạy", new JScrollPane(topTable));
         tabs.add("Tồn thấp", new JScrollPane(new JTable(low)));
         tabs.add("Hạng", new JScrollPane(new JTable(tier)));
         tabs.add("Khách", new JScrollPane(new JTable(customers)));
@@ -136,6 +143,13 @@ public final class ReportPanel extends JPanel {
             showError("Từ ngày không được sau đến ngày.");
             return;
         }
+        report = null;
+        daily.setRowCount(0);
+        top.setRowCount(0);
+        low.setRowCount(0);
+        tier.setRowCount(0);
+        customers.setRowCount(0);
+        kpi.setText("Đang tải báo cáo...");
         new SwingWorker<ReportData, Void>() {
             @Override
             protected ReportData doInBackground() throws Exception {
@@ -156,7 +170,8 @@ public final class ReportPanel extends JPanel {
                     setTier(report.tiers);
                     setCustomers();
                 } catch (Exception exception) {
-                    showError("Không tải được báo cáo.");
+                    kpi.setText("");
+                    showError("Không tải được báo cáo.", exception);
                 }
             }
         }.execute();
@@ -213,6 +228,17 @@ public final class ReportPanel extends JPanel {
     }
 
     private void showError(String message) {
-        JOptionPane.showMessageDialog(this, message);
+        JOptionPane.showMessageDialog(this, message, "Lỗi", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private void showError(String fallback, Exception exception) {
+        Throwable cause = exception;
+        while (cause.getCause() != null
+                && (cause instanceof java.util.concurrent.ExecutionException
+                    || cause instanceof java.lang.reflect.InvocationTargetException))
+            cause = cause.getCause();
+        String message = cause instanceof IllegalArgumentException || cause instanceof SecurityException
+                ? cause.getMessage() : fallback;
+        showError(message == null || message.trim().isEmpty() ? fallback : message);
     }
 }

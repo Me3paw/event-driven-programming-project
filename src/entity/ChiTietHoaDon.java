@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 
 public class ChiTietHoaDon {
   private String maSanPham;
+  private String tenSanPham;
   private int soLuong;
   private BigDecimal donGiaBan;
   private BigDecimal tienGiamDong;
@@ -14,6 +15,12 @@ public class ChiTietHoaDon {
   }
   public void setMaSanPham(String maSanPham) {
     this.maSanPham = maSanPham;
+  }
+  public String getTenSanPham() {
+    return tenSanPham;
+  }
+  public void setTenSanPham(String tenSanPham) {
+    this.tenSanPham = tenSanPham;
   }
   public int getSoLuong() {
     return soLuong;

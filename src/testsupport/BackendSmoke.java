@@ -55,7 +55,7 @@ public final class BackendSmoke {
     request.setThanhToanDienTuThanhCong(true);
     request.setMaThamChieuThanhToan("SMOKE-" + System.currentTimeMillis());
     DongThanhToan line = new DongThanhToan();
-    line.setMaSanPham("SP001");
+    line.setMaSanPham("893000000001");
     line.setSoLuong(1);
     request.getDongHang().add(line);
     SaleService sales = new SaleService();
@@ -78,17 +78,17 @@ public final class BackendSmoke {
       throw new AssertionError("Thu ngân phải xem được tồn kho");
     deny(new Action() {
       public void run() throws Exception {
-        new InventoryService().giamTonFifo(cashier, "DC-BYPASS", "SP001", 1, "Kiem thu");
+        new InventoryService().giamTonFifo(cashier, "DC-BYPASS", "893000000001", 1, "Kiem thu");
       }
     });
     deny(new Action() {
       public void run() throws Exception {
-        new InventoryService().timDieuChinh(cashier, null);
+        new InventoryService().timPhieuDieuChinh(cashier, null);
       }
     });
     deny(new Action() {
       public void run() throws Exception {
-        new InventoryService().chiTietDieuChinh(cashier, "DC001");
+        new InventoryService().chiTietPhieuDieuChinh(cashier, "DC001");
       }
     });
     deny(new Action() {

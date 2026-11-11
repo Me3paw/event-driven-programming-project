@@ -1,6 +1,6 @@
 package entity;
 
-public class ChiTietDieuChinh {
+public class ChiTietPhieuDieuChinh {
   private String maDieuChinh;
   private long maLo;
   private int soLuongGiam;

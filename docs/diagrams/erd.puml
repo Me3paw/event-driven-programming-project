@@ -91,14 +91,14 @@ entity "LO_TON_KHO" as lot {
   so_luong_con : INT
   thoi_diem_nhap : DATETIME
 }
-entity "DIEU_CHINH_TON" as dct {
+entity "PHIEU_DIEU_CHINH_TON" as dct {
   * ma_dieu_chinh : VARCHAR(20) <<PK>>
   --
   ma_nhan_vien : VARCHAR(20) <<FK>>
   thoi_diem_lap : DATETIME
   ly_do : VARCHAR(255)
 }
-entity "CHI_TIET_DIEU_CHINH" as ctdc {
+entity "CHI_TIET_PHIEU_DIEU_CHINH" as ctdc {
   * ma_dieu_chinh : VARCHAR(20) <<PK, FK>>
   * ma_lo : BIGINT <<PK, FK>>
   --

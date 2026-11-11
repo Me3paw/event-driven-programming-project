@@ -2,14 +2,13 @@ package graphicUI;
 
 import components.UiTheme;
 import components.DialogActions;
+import components.FormValidator;
 import entity.NhanVien;
-import entity.TaiKhoan;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -17,9 +16,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
@@ -31,69 +28,53 @@ import service.MasterDataService;
 @SuppressWarnings("serial")
 public final class StaffPanel extends JPanel {
     private final Actor actor;
-    private final JTextField key = new JTextField(14);
-    private final JTextField state = new JTextField("", 10);
-    private final List<NhanVien> employeeRows = new ArrayList<NhanVien>();
-    private final List<TaiKhoan> accountRows = new ArrayList<TaiKhoan>();
-    private final DefaultTableModel employees = new DefaultTableModel(
+    private final JTextField key = new JTextField(12);
+    private final JComboBox<String> state = new JComboBox<String>(
+            new String[] {"Tất cả", "DANG_LAM", "NGHI_VIEC"});
+    private final JComboBox<String> title = new JComboBox<String>(
+            new String[] {"Tất cả", "Thu ngân", "Quản lý", "Nhân viên kho", "Bảo vệ", "Phục vụ"});
+    private final List<NhanVien> rows = new ArrayList<NhanVien>();
+    private final DefaultTableModel model = new DefaultTableModel(
             new String[] {"Mã", "Họ tên", "Điện thoại", "Chức vụ", "Trạng thái"}, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
             return false;
         }
     };
-    private final DefaultTableModel accounts = new DefaultTableModel(
-            new String[] {"Tài khoản", "Nhân viên", "Vai trò", "Trạng thái"}, 0) {
-        @Override
-        public boolean isCellEditable(int row, int column) {
-            return false;
-        }
-    };
-    private final JTable employeeTable = new JTable(employees);
-    private final JTable accountTable = new JTable(accounts);
+    private final JTable table = new JTable(model);
 
     public StaffPanel(Actor actor) {
         super(new BorderLayout(0, 8));
         this.actor = actor;
+        title.setEditable(true);
         setBackground(UiTheme.BACKGROUND);
-        linkSelections(employeeTable, accountTable);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        buttons.setBackground(Color.WHITE);
-        buttons.setBorder(UiTheme.CARD);
-        buttons.add(new JLabel("Từ khóa"));
-        buttons.add(key);
-        buttons.add(new JLabel("Trạng thái"));
-        buttons.add(state);
-        addButton(buttons, "Tìm", new Runnable() { @Override public void run() { load(); } });
-        addButton(buttons, "Chi tiết", new Runnable() { @Override public void run() { detail(); } });
-        addButton(buttons, "Thêm / sửa nhân viên", new Runnable() { @Override public void run() { editEmployee(); } });
-        addButton(buttons, "Tạo / đặt lại tài khoản", new Runnable() {
-            @Override
-            public void run() {
-                editAccount();
-            }
-        });
-        addButton(buttons, "Đổi trạng thái", new Runnable() { @Override public void run() { changeState(); } });
-        addButton(buttons, "Xóa dòng chọn", new Runnable() { @Override public void run() { remove(); } });
-        add(buttons, BorderLayout.NORTH);
-
-        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                new JScrollPane(employeeTable), new JScrollPane(accountTable));
-        split.setResizeWeight(.55);
-        add(split, BorderLayout.CENTER);
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        bar.setBackground(Color.WHITE);
+        bar.setBorder(UiTheme.CARD);
+        addField(bar, "Từ khóa", key);
+        addField(bar, "Chức vụ", title);
+        addField(bar, "Trạng thái", state);
+        addButton(bar, "Tìm", new Runnable() { @Override public void run() { load(); } });
+        addButton(bar, "Chi tiết", new Runnable() { @Override public void run() { detail(); } });
+        addButton(bar, "Thêm", new Runnable() { @Override public void run() { edit(null); } });
+        addButton(bar, "Sửa", new Runnable() { @Override public void run() {
+            NhanVien value = selected();
+            if (value == null) { showError("Hãy chọn nhân viên."); return; }
+            edit(value);
+        } });
+        addButton(bar, "Đổi trạng thái", new Runnable() { @Override public void run() { toggleStatus(); } });
+        add(bar, BorderLayout.NORTH);
+        add(new JScrollPane(table), BorderLayout.CENTER);
         load();
     }
 
-    static void linkSelections(final JTable first, final JTable second) {
-        first.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        second.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        first.getSelectionModel().addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting() && first.getSelectedRow() >= 0) second.clearSelection();
-        });
-        second.getSelectionModel().addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting() && second.getSelectedRow() >= 0) first.clearSelection();
-        });
+    private void addField(JPanel panel, String text, JComponent field) {
+        JLabel label = new JLabel(text);
+        label.setLabelFor(field);
+        panel.add(label);
+        panel.add(field);
     }
 
     private void addButton(JPanel panel, String text, final Runnable action) {
@@ -104,85 +85,52 @@ public final class StaffPanel extends JPanel {
 
     private void load() {
         final String keyword = key.getText().trim();
-        final String filter = state.getText().trim();
+        final String filter = "Tất cả".equals(state.getSelectedItem()) ? ""
+                : (String) state.getSelectedItem();
+        final String position = "Tất cả".equals(title.getSelectedItem()) ? ""
+                : String.valueOf(title.getEditor().getItem()).trim();
+        table.clearSelection();
         new SwingWorker<List<NhanVien>, Void>() {
             @Override
             protected List<NhanVien> doInBackground() throws Exception {
-                return new MasterDataService().timNhanVien(actor, keyword, filter);
+                return new MasterDataService().timNhanVien(actor, keyword, filter, position);
             }
 
             @Override
             protected void done() {
                 try {
-                    employeeRows.clear();
-                    employeeRows.addAll(get());
-                    employeeTable.clearSelection();
-                    employees.setRowCount(0);
-                    for (NhanVien value : employeeRows) {
-                        employees.addRow(new Object[] {value.getMaNhanVien(), value.getHoTen(),
+                    rows.clear();
+                    rows.addAll(get());
+                    model.setRowCount(0);
+                    for (NhanVien value : rows) {
+                        model.addRow(new Object[] {value.getMaNhanVien(), value.getHoTen(),
                                 value.getSoDienThoai(), value.getChucVu(), value.getTrangThai()});
                     }
                 } catch (Exception exception) {
-                    showError("Không tải được nhân viên.");
-                }
-            }
-        }.execute();
-        new SwingWorker<List<TaiKhoan>, Void>() {
-            @Override
-            protected List<TaiKhoan> doInBackground() throws Exception {
-                return new MasterDataService().timTaiKhoan(actor, keyword, "", filter);
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    accountRows.clear();
-                    accountRows.addAll(get());
-                    accountTable.clearSelection();
-                    accounts.setRowCount(0);
-                    for (TaiKhoan value : accountRows) {
-                        accounts.addRow(new Object[] {value.getTenDangNhap(), value.getMaNhanVien(),
-                                value.getVaiTro(), value.getTrangThai()});
-                    }
-                } catch (Exception exception) {
-                    showError("Không tải được tài khoản.");
+                    showError("Không tải được nhân viên.", exception);
                 }
             }
         }.execute();
     }
 
-    private Selected selected() {
-        int employeeRow = employeeTable.getSelectedRow();
-        int accountRow = accountTable.getSelectedRow();
-        if ((employeeRow < 0) == (accountRow < 0)) return null;
-        if (employeeRow >= 0) {
-            return Selected.employee(employeeRows.get(employeeTable.convertRowIndexToModel(employeeRow)));
-        }
-        return Selected.account(accountRows.get(accountTable.convertRowIndexToModel(accountRow)));
+    private NhanVien selected() {
+        int row = table.getSelectedRow();
+        return row < 0 ? null : rows.get(table.convertRowIndexToModel(row));
     }
 
     private void detail() {
-        Selected selected = selected();
-        if (selected == null) {
-            showError("Hãy chọn nhân viên hoặc tài khoản.");
+        NhanVien value = selected();
+        if (value == null) {
+            showError("Hãy chọn nhân viên.");
             return;
         }
         JPanel details = new JPanel(new GridLayout(0, 2, 8, 4));
-        if (selected.isEmployee()) {
-            NhanVien value = selected.employee;
-            addDetail(details, "Mã", value.getMaNhanVien());
-            addDetail(details, "Họ tên", value.getHoTen());
-            addDetail(details, "Điện thoại", value.getSoDienThoai());
-            addDetail(details, "Chức vụ", value.getChucVu());
-            addDetail(details, "Trạng thái", value.getTrangThai());
-        } else {
-            TaiKhoan value = selected.account;
-            addDetail(details, "Tên đăng nhập", value.getTenDangNhap());
-            addDetail(details, "Mã nhân viên", value.getMaNhanVien());
-            addDetail(details, "Vai trò", value.getVaiTro());
-            addDetail(details, "Trạng thái", value.getTrangThai());
-        }
-        JOptionPane.showMessageDialog(this, details, "Chi tiết", JOptionPane.INFORMATION_MESSAGE);
+        addDetail(details, "Mã", value.getMaNhanVien());
+        addDetail(details, "Họ tên", value.getHoTen());
+        addDetail(details, "Điện thoại", value.getSoDienThoai());
+        addDetail(details, "Chức vụ", value.getChucVu());
+        addDetail(details, "Trạng thái", value.getTrangThai());
+        DialogActions.info(this, details, "Chi tiết nhân viên");
     }
 
     private void addDetail(JPanel panel, String label, String value) {
@@ -190,39 +138,73 @@ public final class StaffPanel extends JPanel {
         panel.add(new JLabel(value == null ? "" : value));
     }
 
-    private void editEmployee() {
-        Selected selected = selected();
-        NhanVien existing = selected != null && selected.isEmployee() ? selected.employee : null;
-        JTextField id = new JTextField(existing == null ? "" : existing.getMaNhanVien());
+    private void edit(NhanVien existing) {
+        if (existing != null) {
+            editForm(existing.getMaNhanVien(), existing);
+            return;
+        }
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return new MasterDataService().maNhanVienTiepTheo(actor);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    editForm(get(), null);
+                } catch (Exception exception) {
+                    showError("Không tạo được mã nhân viên.", exception);
+                }
+            }
+        }.execute();
+    }
+
+    private void editForm(String generatedId, NhanVien existing) {
+        JTextField id = new JTextField(existing == null ? generatedId : existing.getMaNhanVien());
         JTextField name = new JTextField(existing == null ? "" : existing.getHoTen());
         JTextField phone = new JTextField(existing == null ? "" : existing.getSoDienThoai());
-        JTextField title = new JTextField(existing == null ? "" : existing.getChucVu());
-        id.setEditable(existing == null);
-        JPanel form = new JPanel(new GridLayout(0, 1, 0, 4));
-        addField(form, "Mã", id);
-        addField(form, "Họ tên", name);
-        addField(form, "Điện thoại", phone);
-        addField(form, "Chức vụ", title);
-        if (!DialogActions.confirm(this, form, existing == null ? "Thêm nhân viên" : "Sửa nhân viên")) return;
+        JComboBox<String> title = new JComboBox<String>(
+                new String[] {"Thu ngân", "Quản lý", "Nhân viên kho", "Bảo vệ", "Phục vụ"});
+        title.setEditable(true);
+        title.setSelectedItem(existing == null ? "Thu ngân" : existing.getChucVu());
+        id.setEditable(false);
+        FormValidator validator = new FormValidator();
+        JPanel form = FormValidator.form();
+        form.add(validator.row("Mã", id));
+        form.add(validator.row("Họ tên", name));
+        form.add(validator.row("Điện thoại", phone));
+        form.add(validator.row("Chức vụ", title));
+        validator.require(name, "Họ tên nhân viên không được để trống.");
+        validator.require(phone, "Số điện thoại nhân viên không được để trống.");
+        validator.matches(phone, "0[35789][0-9]{8}",
+                "Số điện thoại sai định dạng, phải có dạng 0xxxxxxxxx (10 số).");
+        validator.custom(title, () -> String.valueOf(title.getEditor().getItem()).trim().isEmpty()
+                ? "Chức vụ không được để trống." : null);
+        if (!DialogActions.confirm(this, form, existing == null ? "Thêm nhân viên" : "Sửa nhân viên",
+                validator)) return;
 
         final String employeeId = id.getText().trim();
         final String employeeName = name.getText().trim();
         final String employeePhone = phone.getText().trim();
-        final String employeeTitle = title.getText().trim();
-        if (blank(employeeId) || blank(employeeName) || blank(employeePhone) || blank(employeeTitle)) {
-            showError("Nhập đủ mã, họ tên, điện thoại và chức vụ.");
-            return;
-        }
+        final String employeeTitle = String.valueOf(title.getEditor().getItem()).trim();
         final NhanVien value = new NhanVien();
         value.setMaNhanVien(employeeId);
         value.setHoTen(employeeName);
         value.setSoDienThoai(employeePhone);
         value.setChucVu(employeeTitle);
         value.setTrangThai(existing == null ? "DANG_LAM" : existing.getTrangThai());
+        final boolean isNew = existing == null;
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                new MasterDataService().luuNhanVien(actor, value);
+                MasterDataService service = new MasterDataService();
+                if (isNew) {
+                    for (NhanVien found : service.timNhanVien(actor, value.getMaNhanVien(), null))
+                        if (value.getMaNhanVien().equals(found.getMaNhanVien()))
+                            throw new IllegalArgumentException("Mã nhân viên đã tồn tại");
+                }
+                service.luuNhanVien(actor, value);
                 return null;
             }
 
@@ -231,89 +213,30 @@ public final class StaffPanel extends JPanel {
                 try {
                     get();
                     load();
+                    JOptionPane.showMessageDialog(StaffPanel.this, "Lưu nhân viên thành công.", "Thành công",
+                            JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception exception) {
-                    showError("Không lưu được nhân viên.");
+                    showError("Không lưu được nhân viên.", exception);
                 }
             }
         }.execute();
     }
 
-    private void editAccount() {
-        Selected selected = selected();
-        TaiKhoan existing = selected != null && !selected.isEmployee() ? selected.account : null;
-        JTextField user = new JTextField(existing == null ? "" : existing.getTenDangNhap());
-        JTextField employee = new JTextField(existing == null ? "" : existing.getMaNhanVien());
-        JComboBox<String> role = new JComboBox<String>(new String[] {"QUAN_LY", "THU_NGAN"});
-        role.setSelectedItem(existing == null ? "THU_NGAN" : existing.getVaiTro());
-        JPasswordField password = new JPasswordField();
-        user.setEditable(existing == null);
-        JPanel form = new JPanel(new GridLayout(0, 1, 0, 4));
-        addField(form, "Tên đăng nhập", user);
-        addField(form, "Mã nhân viên", employee);
-        addField(form, "Vai trò", role);
-        addField(form, existing == null ? "Mật khẩu" : "Mật khẩu mới", password);
-        boolean saved = DialogActions.confirm(this, form,
-                existing == null ? "Tạo tài khoản" : "Đặt lại tài khoản");
-        final char[] secret = password.getPassword();
-        password.setText("");
-        if (!saved) {
-            Arrays.fill(secret, '\0');
-            return;
-        }
-
-        final String username = user.getText().trim();
-        final String employeeId = employee.getText().trim();
-        final String accountRole = (String) role.getSelectedItem();
-        if (blank(username) || blank(employeeId) || blank(accountRole)
-                || (existing == null && secret.length == 0)) {
-            Arrays.fill(secret, '\0');
-            showError(existing == null ? "Nhập đủ thông tin và mật khẩu." : "Nhập đủ thông tin tài khoản.");
-            return;
-        }
-        final TaiKhoan value = new TaiKhoan();
-        value.setTenDangNhap(username);
-        value.setMaNhanVien(employeeId);
-        value.setVaiTro(accountRole);
-        value.setTrangThai(existing == null ? "HOAT_DONG" : existing.getTrangThai());
-        new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                new MasterDataService().luuTaiKhoan(actor, value, secret);
-                return null;
-            }
-
-            @Override
-            protected void done() {
-                Arrays.fill(secret, '\0');
-                try {
-                    get();
-                    load();
-                } catch (Exception exception) {
-                    showError("Không lưu được tài khoản.");
-                }
-            }
-        }.execute();
-    }
-
-    private void changeState() {
-        Selected selected = selected();
+    private void toggleStatus() {
+        NhanVien selected = selected();
         if (selected == null) {
-            showError("Hãy chọn nhân viên hoặc tài khoản.");
+            showError("Hãy chọn nhân viên.");
             return;
         }
-        final boolean employee = selected.isEmployee();
-        final String id = selected.id();
-        final String value = selected.nextStatus();
-        String message = ("DANG_LAM".equals(value) || "HOAT_DONG".equals(value)
-                ? "Kích hoạt lại " : "Ngừng hoạt động ") + id + "?";
+        final String id = selected.getMaNhanVien();
+        final String value = "DANG_LAM".equals(selected.getTrangThai()) ? "NGHI_VIEC" : "DANG_LAM";
+        String message = ("DANG_LAM".equals(value) ? "Cho nhân viên " : "Cho nghỉ việc ") + id + "?";
         if (JOptionPane.showConfirmDialog(this, message, "Xác nhận", JOptionPane.YES_NO_OPTION)
                 != JOptionPane.YES_OPTION) return;
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                MasterDataService service = new MasterDataService();
-                if (employee) service.capNhatTrangThaiNhanVien(actor, id, value);
-                else service.capNhatTrangThaiTaiKhoan(actor, id, value);
+                new MasterDataService().capNhatTrangThaiNhanVien(actor, id, value);
                 return null;
             }
 
@@ -322,87 +245,29 @@ public final class StaffPanel extends JPanel {
                 try {
                     get();
                     load();
+                    JOptionPane.showMessageDialog(StaffPanel.this, "Đổi trạng thái nhân viên thành công.", "Thành công",
+                            JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception exception) {
-                    showError("Không đổi được trạng thái.");
+                    showError("Không đổi được trạng thái.", exception);
                 }
             }
         }.execute();
-    }
-
-    private void remove() {
-        Selected selected = selected();
-        if (selected == null) {
-            showError("Hãy chọn nhân viên hoặc tài khoản.");
-            return;
-        }
-        final boolean employee = selected.isEmployee();
-        final String id = selected.id();
-        if (JOptionPane.showConfirmDialog(this, "Xóa " + id + "?", "Xác nhận", JOptionPane.YES_NO_OPTION)
-                != JOptionPane.YES_OPTION) return;
-        new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                MasterDataService service = new MasterDataService();
-                if (employee) service.xoaNhanVien(actor, id);
-                else service.xoaTaiKhoan(actor, id);
-                return null;
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    get();
-                    load();
-                } catch (Exception exception) {
-                    showError("Không thể xóa bản ghi có liên hệ lịch sử.");
-                }
-            }
-        }.execute();
-    }
-
-    private void addField(JPanel panel, String text, JComponent field) {
-        JLabel label = new JLabel(text);
-        label.setLabelFor(field);
-        panel.add(label);
-        panel.add(field);
-    }
-
-    private boolean blank(String value) {
-        return value == null || value.trim().isEmpty();
     }
 
     private void showError(String message) {
-        JOptionPane.showMessageDialog(this, message);
+        showError(message, null);
     }
 
-    private static final class Selected {
-        private final NhanVien employee;
-        private final TaiKhoan account;
-
-        private Selected(NhanVien employee, TaiKhoan account) {
-            this.employee = employee;
-            this.account = account;
+    private void showError(String message, Exception exception) {
+        String text = message;
+        if (exception != null) {
+            Throwable cause = exception;
+            while (cause.getCause() != null
+                    && cause instanceof java.util.concurrent.ExecutionException)
+                cause = cause.getCause();
+            if (cause instanceof IllegalArgumentException || cause instanceof IllegalStateException)
+                text = cause.getMessage();
         }
-
-        private static Selected employee(NhanVien value) {
-            return new Selected(value, null);
-        }
-
-        private static Selected account(TaiKhoan value) {
-            return new Selected(null, value);
-        }
-
-        private boolean isEmployee() {
-            return employee != null;
-        }
-
-        private String id() {
-            return isEmployee() ? employee.getMaNhanVien() : account.getTenDangNhap();
-        }
-
-        private String nextStatus() {
-            if (isEmployee()) return "DANG_LAM".equals(employee.getTrangThai()) ? "NGHI_VIEC" : "DANG_LAM";
-            return "HOAT_DONG".equals(account.getTrangThai()) ? "KHOA" : "HOAT_DONG";
-        }
+        JOptionPane.showMessageDialog(this, text == null ? message : text, "Lỗi", JOptionPane.ERROR_MESSAGE);
     }
 }

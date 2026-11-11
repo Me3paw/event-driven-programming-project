@@ -22,9 +22,12 @@ public class AuthService {
   private TaiKhoan dangNhap(String tenDangNhap, char[] matKhau) throws SQLException {
     try (Connection connection = DBConnection.open()) {
       TaiKhoan taiKhoan = taiKhoanDAO.find(tenDangNhap, connection);
-      if (taiKhoan == null || !TrangThaiTaiKhoan.HOAT_DONG.name().equals(taiKhoan.getTrangThai())
-          || !verify(matKhau, taiKhoan.getMatKhauBam()))
-        throw new SecurityException("Đăng nhập không hợp lệ");
+      if (taiKhoan == null || !verify(matKhau, taiKhoan.getMatKhauBam()))
+        throw new SecurityException("Tên đăng nhập hoặc mật khẩu không đúng");
+      if (!TrangThaiTaiKhoan.HOAT_DONG.name().equals(taiKhoan.getTrangThai()))
+        throw new SecurityException("Tài khoản đang bị khóa hoặc ngừng hoạt động");
+      if (!"DANG_LAM".equals(taiKhoan.getTrangThaiNhanVien()))
+        throw new SecurityException("Tài khoản không thể sử dụng vì nhân viên đã nghỉ việc");
       return taiKhoan;
     }
   }
@@ -33,12 +36,31 @@ public class AuthService {
     return new Actor(dangNhap(tenDangNhap, matKhau));
   }
 
+  public void doiMatKhau(Actor actor, char[] matKhauCu, char[] matKhauMoi) throws SQLException {
+    if (actor == null || actor.getTenDangNhap() == null)
+      throw new SecurityException("Chưa đăng nhập");
+    try (Connection connection = DBConnection.open()) {
+      TaiKhoan taiKhoan = taiKhoanDAO.find(actor.getTenDangNhap(), connection);
+      if (taiKhoan == null || !verify(matKhauCu, taiKhoan.getMatKhauBam()))
+        throw new SecurityException("Mật khẩu hiện tại không đúng");
+      if (matKhauMoi == null || matKhauMoi.length < 6)
+        throw new IllegalArgumentException("Mật khẩu mới phải có ít nhất 6 ký tự");
+      taiKhoanDAO.updatePassword(actor.getTenDangNhap(), hash(matKhauMoi), connection);
+    } finally {
+      if (matKhauCu != null)
+        Arrays.fill(matKhauCu, '\0');
+      if (matKhauMoi != null)
+        Arrays.fill(matKhauMoi, '\0');
+    }
+  }
+
   TaiKhoan xacThucQuanLy(String tenDangNhap, char[] matKhau, Connection connection)
       throws SQLException {
     TaiKhoan taiKhoan = taiKhoanDAO.find(tenDangNhap, connection);
-    if (taiKhoan == null || !VaiTro.QUAN_LY.name().equals(taiKhoan.getVaiTro())
+    if (taiKhoan == null || !verify(matKhau, taiKhoan.getMatKhauBam())
+        || !VaiTro.QUAN_LY.name().equals(taiKhoan.getVaiTro())
         || !TrangThaiTaiKhoan.HOAT_DONG.name().equals(taiKhoan.getTrangThai())
-        || !verify(matKhau, taiKhoan.getMatKhauBam()))
+        || !"DANG_LAM".equals(taiKhoan.getTrangThaiNhanVien()))
       throw new SecurityException("Cần xác thực quản lý");
     return taiKhoan;
   }

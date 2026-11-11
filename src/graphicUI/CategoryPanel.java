@@ -2,6 +2,7 @@ package graphicUI;
 
 import components.UiTheme;
 import components.DialogActions;
+import components.FormValidator;
 import entity.LoaiSanPham;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -78,12 +79,6 @@ public final class CategoryPanel extends JPanel {
                     toggle();
                 }
             });
-            button(bar, "Xóa", KeyEvent.VK_X, new Runnable() {
-                @Override
-                public void run() {
-                    remove();
-                }
-            });
         }
         add(bar, BorderLayout.NORTH);
         add(new JScrollPane(table), BorderLayout.CENTER);
@@ -139,22 +134,46 @@ public final class CategoryPanel extends JPanel {
     }
 
     private void edit(LoaiSanPham existing) {
-        JTextField id = new JTextField(existing == null ? "" : existing.getMaLoai());
+        if (existing != null) {
+            editForm(existing.getMaLoai(), existing);
+            return;
+        }
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return new MasterDataService().maLoaiTiepTheo(actor);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    editForm(get(), null);
+                } catch (Exception exception) {
+                    error("Không tạo được mã loại.", exception);
+                }
+            }
+        }.execute();
+    }
+
+    private void editForm(String generatedId, LoaiSanPham existing) {
+        JTextField id = new JTextField(existing == null ? generatedId : existing.getMaLoai());
         JTextField name = new JTextField(existing == null ? "" : existing.getTenLoai());
         JTextField note = new JTextField(existing == null ? "" : existing.getMoTa());
-        id.setEditable(existing == null);
-        JPanel form = new JPanel(new GridLayout(0, 1));
-        addField(form, "Mã", id);
-        addField(form, "Tên", name);
-        addField(form, "Mô tả", note);
-        if (!DialogActions.confirm(this, form, existing == null ? "Thêm loại" : "Sửa loại"))
+        id.setEditable(false);
+        FormValidator validator = new FormValidator();
+        JPanel form = FormValidator.form();
+        form.add(validator.row("Mã", id));
+        form.add(validator.row("Tên", name));
+        form.add(validator.row("Mô tả", note));
+        validator.require(name, "Tên loại không được để trống.");
+        if (!DialogActions.confirm(this, form, existing == null ? "Thêm loại" : "Sửa loại", validator))
             return;
         final LoaiSanPham value = new LoaiSanPham();
         value.setMaLoai(id.getText().trim());
         value.setTenLoai(name.getText().trim());
         value.setMoTa(note.getText().trim());
         value.setTrangThai(existing == null ? "DANG_KINH_DOANH" : existing.getTrangThai());
-        save(value);
+        save(value, existing == null);
     }
 
     private void editSelected() {
@@ -174,14 +193,20 @@ public final class CategoryPanel extends JPanel {
                 != JOptionPane.YES_OPTION)
             return;
         value.setTrangThai(next);
-        save(value);
+        save(value, false);
     }
 
-    private void save(final LoaiSanPham value) {
+    private void save(final LoaiSanPham value, final boolean isNew) {
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                new MasterDataService().luuLoai(actor, value);
+                MasterDataService service = new MasterDataService();
+                if (isNew) {
+                    for (LoaiSanPham found : service.timLoai(actor, value.getMaLoai()))
+                        if (value.getMaLoai().equals(found.getMaLoai()))
+                            throw new IllegalArgumentException("Mã loại đã tồn tại");
+                }
+                service.luuLoai(actor, value);
                 return null;
             }
             @Override
@@ -189,6 +214,8 @@ public final class CategoryPanel extends JPanel {
                 try {
                     get();
                     load();
+                    JOptionPane.showMessageDialog(CategoryPanel.this, "Lưu loại sản phẩm thành công.", "Thành công",
+                            JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception exception) {
                     error("Không lưu được loại sản phẩm.", exception);
                 }
@@ -214,6 +241,8 @@ public final class CategoryPanel extends JPanel {
                 try {
                     get();
                     load();
+                    JOptionPane.showMessageDialog(CategoryPanel.this, "Xóa loại sản phẩm thành công.", "Thành công",
+                            JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception exception) {
                     error("Không thể xóa loại đã được tham chiếu. Hãy ngừng kinh doanh thay vì xóa.", exception);
                 }
@@ -222,9 +251,14 @@ public final class CategoryPanel extends JPanel {
     }
 
     private void error(String message, Exception exception) {
-        Throwable cause = exception.getCause() == null ? exception : exception.getCause();
-        JOptionPane.showMessageDialog(this, cause.getMessage() == null ? message : message + "\n" + cause.getMessage(),
-                "Lỗi", JOptionPane.ERROR_MESSAGE);
+        Throwable cause = exception;
+        while (cause.getCause() != null
+                && cause instanceof java.util.concurrent.ExecutionException)
+            cause = cause.getCause();
+        String text = cause instanceof IllegalArgumentException || cause instanceof IllegalStateException
+                ? cause.getMessage()
+                : message;
+        JOptionPane.showMessageDialog(this, text == null ? message : text, "Lỗi", JOptionPane.ERROR_MESSAGE);
     }
 
     private void addField(JPanel panel, String text, JComponent field) {

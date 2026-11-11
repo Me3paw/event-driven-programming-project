@@ -1,6 +1,7 @@
 package graphicUI;
 
 import components.DialogActions;
+import components.FormValidator;
 import entity.NhaCungCap;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
@@ -8,6 +9,7 @@ import java.awt.GridLayout;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -25,7 +27,8 @@ public final class SupplierPanel extends JPanel {
     private static final long serialVersionUID = 1L;
     private final Actor actor;
     private final JTextField key = new JTextField(16);
-    private final JTextField state = new JTextField(10);
+    private final JComboBox<String> state = new JComboBox<String>(
+            new String[] {"Tất cả", "HOAT_DONG", "NGUNG_HOAT_DONG"});
     private final List<NhaCungCap> rows = new ArrayList<NhaCungCap>();
     private final DefaultTableModel model = new DefaultTableModel(
             new String[] {"Mã", "Tên", "Điện thoại", "Địa chỉ", "Trạng thái"}, 0) {
@@ -50,7 +53,6 @@ public final class SupplierPanel extends JPanel {
         button(bar, "Thêm", new Runnable() { @Override public void run() { edit(null); } });
         button(bar, "Sửa", new Runnable() { @Override public void run() { editSelected(); } });
         button(bar, "Đổi trạng thái", new Runnable() { @Override public void run() { toggle(); } });
-        button(bar, "Xóa", new Runnable() { @Override public void run() { remove(); } });
         add(bar, BorderLayout.NORTH);
         add(new JScrollPane(table), BorderLayout.CENTER);
         load();
@@ -72,12 +74,13 @@ public final class SupplierPanel extends JPanel {
 
     private void load() {
         final String keyword = key.getText().trim();
-        final String filter = state.getText().trim();
+        final String filter = "Tất cả".equals(state.getSelectedItem()) ? ""
+                : (String) state.getSelectedItem();
         table.clearSelection();
         new SwingWorker<List<NhaCungCap>, Void>() {
             @Override
             protected List<NhaCungCap> doInBackground() throws Exception {
-                return new MasterDataService().timNhaCungCap(actor, keyword);
+                return new MasterDataService().timNhaCungCap(actor, keyword, filter);
             }
 
             @Override
@@ -93,7 +96,7 @@ public final class SupplierPanel extends JPanel {
                                 value.getSoDienThoai(), value.getDiaChi(), value.getTrangThai()});
                     }
                 } catch (Exception exception) {
-                    message("Không tải được nhà cung cấp.");
+                    message("Không tải được nhà cung cấp.", exception);
                 }
             }
         }.execute();
@@ -121,62 +124,74 @@ public final class SupplierPanel extends JPanel {
     }
 
     private void edit(NhaCungCap existing) {
-        JTextField id = new JTextField(existing == null ? "" : existing.getMaNhaCungCap());
+        if (existing != null) {
+            editForm(existing.getMaNhaCungCap(), existing);
+            return;
+        }
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return new MasterDataService().maNhaCungCapTiepTheo(actor);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    editForm(get(), null);
+                } catch (Exception exception) {
+                    message("Không tạo được mã nhà cung cấp.", exception);
+                }
+            }
+        }.execute();
+    }
+
+    private void editForm(String generatedId, NhaCungCap existing) {
+        JTextField id = new JTextField(existing == null ? generatedId : existing.getMaNhaCungCap());
         JTextField name = new JTextField(existing == null ? "" : existing.getTenNhaCungCap());
         JTextField phone = new JTextField(existing == null ? "" : existing.getSoDienThoai());
         JTextField address = new JTextField(existing == null ? "" : existing.getDiaChi());
-        id.setEditable(existing == null);
-        JPanel form = new JPanel(new GridLayout(0, 1, 0, 4));
-        addField(form, "Mã", id);
-        addField(form, "Tên", name);
-        addField(form, "Điện thoại", phone);
-        addField(form, "Địa chỉ", address);
-        if (!DialogActions.confirm(this, form, existing == null ? "Thêm nhà cung cấp" : "Sửa nhà cung cấp")) return;
+        id.setEditable(false);
+        FormValidator validator = new FormValidator();
+        JPanel form = FormValidator.form();
+        form.add(validator.row("Mã", id));
+        form.add(validator.row("Tên", name));
+        form.add(validator.row("Điện thoại", phone));
+        form.add(validator.row("Địa chỉ", address));
+        validator.require(name, "Tên nhà cung cấp không được để trống.");
+        validator.matches(phone, "\\+?[0-9][0-9 .()\\-]{5,19}",
+                "Số điện thoại sai định dạng.");
+        if (!DialogActions.confirm(this, form, existing == null ? "Thêm nhà cung cấp" : "Sửa nhà cung cấp",
+                validator)) return;
         NhaCungCap value = new NhaCungCap();
         value.setMaNhaCungCap(id.getText().trim());
         value.setTenNhaCungCap(name.getText().trim());
         value.setSoDienThoai(phone.getText().trim());
         value.setDiaChi(address.getText().trim());
         value.setTrangThai(existing == null ? "HOAT_DONG" : existing.getTrangThai());
-        save(value);
+        save(value, existing == null);
     }
 
     private void toggle() {
         NhaCungCap value = selected();
-        if (value == null || JOptionPane.showConfirmDialog(this, "Xác nhận?", "Trạng thái",
-                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
-        value.setTrangThai("HOAT_DONG".equals(value.getTrangThai()) ? "NGUNG_HOAT_DONG" : "HOAT_DONG");
-        save(value);
+        if (value == null) return;
+        String next = "HOAT_DONG".equals(value.getTrangThai()) ? "NGUNG_HOAT_DONG" : "HOAT_DONG";
+        if (JOptionPane.showConfirmDialog(this, "Chuyển nhà cung cấp sang trạng thái " + next + "?",
+                "Xác nhận", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+        value.setTrangThai(next);
+        save(value, false);
     }
 
-    private void save(final NhaCungCap value) {
+    private void save(final NhaCungCap value, final boolean isNew) {
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                new MasterDataService().luuNhaCungCap(actor, value);
-                return null;
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    get();
-                    load();
-                } catch (Exception exception) {
-                    message("Không lưu được nhà cung cấp.");
+                MasterDataService service = new MasterDataService();
+                if (isNew) {
+                    for (NhaCungCap found : service.timNhaCungCap(actor, value.getMaNhaCungCap(), null))
+                        if (value.getMaNhaCungCap().equals(found.getMaNhaCungCap()))
+                            throw new IllegalArgumentException("Mã nhà cung cấp đã tồn tại");
                 }
-            }
-        }.execute();
-    }
-
-    private void remove() {
-        final NhaCungCap value = selected();
-        if (value == null || JOptionPane.showConfirmDialog(this, "Xóa?", "Xác nhận",
-                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
-        new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                new MasterDataService().xoaNhaCungCap(actor, value.getMaNhaCungCap());
+                service.luuNhaCungCap(actor, value);
                 return null;
             }
 
@@ -185,14 +200,26 @@ public final class SupplierPanel extends JPanel {
                 try {
                     get();
                     load();
+                    message("Lưu nhà cung cấp thành công.");
                 } catch (Exception exception) {
-                    message("Không thể xóa; hãy ngừng hoạt động.");
+                    message("Không lưu được nhà cung cấp.", exception);
                 }
             }
         }.execute();
     }
 
     private void message(String text) {
-        JOptionPane.showMessageDialog(this, text);
+        JOptionPane.showMessageDialog(this, text, "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void message(String fallback, Exception exception) {
+        Throwable cause = exception;
+        while (cause.getCause() != null
+                && cause instanceof java.util.concurrent.ExecutionException)
+            cause = cause.getCause();
+        String text = cause instanceof IllegalArgumentException || cause instanceof IllegalStateException
+                ? cause.getMessage()
+                : fallback;
+        JOptionPane.showMessageDialog(this, text == null ? fallback : text, "Lỗi", JOptionPane.ERROR_MESSAGE);
     }
 }

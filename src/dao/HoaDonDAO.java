@@ -82,7 +82,7 @@ public class HoaDonDAO {
   }
   public HoaDon lock(String maHoaDon, Connection c) throws SQLException {
     try (PreparedStatement s =
-             c.prepareStatement("SELECT * FROM HOA_DON WHERE ma_hoa_don=? FOR UPDATE")) {
+             c.prepareStatement("SELECT * FROM HOA_DON WITH (UPDLOCK, ROWLOCK) WHERE ma_hoa_don=?")) {
       s.setString(1, maHoaDon);
       try (ResultSet r = s.executeQuery()) {
         return r.next() ? map(r) : null;
@@ -129,8 +129,8 @@ public class HoaDonDAO {
     String q =
         "SELECT ma_hoa_don FROM HOA_DON WHERE (? IS NULL OR ma_hoa_don LIKE ?) AND (? IS NULL OR "
         + "ma_nhan_vien=?) AND (? IS NULL OR ma_khach_hang=?) AND (? IS NULL OR trang_thai=?) AND "
-        + "(? IS NULL OR phuong_thuc_tt=?) AND (? IS NULL OR DATE(thoi_diem_lap)>=?) AND (? IS "
-        + "NULL OR DATE(thoi_diem_lap)<=?) ORDER BY thoi_diem_lap DESC";
+        + "(? IS NULL OR phuong_thuc_tt=?) AND (? IS NULL OR CAST(thoi_diem_lap AS DATE)>=?) AND (? IS "
+        + "NULL OR CAST(thoi_diem_lap AS DATE)<=?) ORDER BY thoi_diem_lap DESC";
     try (PreparedStatement s = c.prepareStatement(q)) {
       s.setString(1, keyword);
       s.setString(2, keyword == null ? null : "%" + keyword + "%");
@@ -186,17 +186,19 @@ public class HoaDonDAO {
       }
     }
     try (PreparedStatement s =
-             c.prepareStatement("SELECT ma_san_pham,so_luong,don_gia_ban,tien_giam_dong,thanh_tien "
-                 + "FROM CHI_TIET_HOA_DON WHERE ma_hoa_don=?")) {
+             c.prepareStatement("SELECT d.ma_san_pham,p.ten_san_pham,d.so_luong,d.don_gia_ban,"
+                 + "d.tien_giam_dong,d.thanh_tien FROM CHI_TIET_HOA_DON d "
+                 + "LEFT JOIN SAN_PHAM p ON p.ma_san_pham=d.ma_san_pham WHERE d.ma_hoa_don=?")) {
       s.setString(1, maHoaDon);
       try (ResultSet r = s.executeQuery()) {
         while (r.next()) {
           ChiTietHoaDon d = new ChiTietHoaDon();
           d.setMaSanPham(r.getString(1));
-          d.setSoLuong(r.getInt(2));
-          d.setDonGiaBan(r.getBigDecimal(3));
-          d.setTienGiamDong(r.getBigDecimal(4));
-          d.setThanhTien(r.getBigDecimal(5));
+          d.setTenSanPham(r.getString(2));
+          d.setSoLuong(r.getInt(3));
+          d.setDonGiaBan(r.getBigDecimal(4));
+          d.setTienGiamDong(r.getBigDecimal(5));
+          d.setThanhTien(r.getBigDecimal(6));
           h.getChiTiet().add(d);
         }
       }
