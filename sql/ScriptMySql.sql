@@ -341,7 +341,11 @@ CREATE TABLE HOA_DON (
                          trang_thai NVARCHAR(20) NOT NULL,
                          ly_do_huy NVARCHAR(255) NULL,
 
-                         CHECK (ma_hoa_don LIKE N'HD[0-9]%'),
+                         CHECK (
+                             LEN(ma_hoa_don) = 15
+                                 AND ma_hoa_don LIKE N'HD[0-9]%'
+                                 AND SUBSTRING(ma_hoa_don, 3, 13) NOT LIKE N'%[^0-9]%'
+                             ),
 
                          CHECK (
                              phuong_thuc_tt IN (
@@ -897,7 +901,7 @@ INSERT INTO HOA_DON (
     trang_thai, ly_do_huy
 )
 SELECT
-    N'HD' + RIGHT(N'000' + CONVERT(NVARCHAR(3), t.invoice_no), 3),
+    N'HD' + CONVERT(NVARCHAR(20), DATEDIFF_BIG(MILLISECOND, '1970-01-01', t.thoi_diem_lap)),
     t.ma_nhan_vien,
     t.ma_khach_hang,
     t.ma_khuyen_mai,
@@ -940,13 +944,14 @@ END,
     -- 3.13 CHI_TIET_HOA_DON
 INSERT INTO CHI_TIET_HOA_DON (ma_hoa_don, ma_san_pham, so_luong, don_gia_ban, tien_giam_dong, thanh_tien)
 SELECT
-    N'HD' + RIGHT(N'000' + CONVERT(NVARCHAR(3), l.invoice_no), 3),
+    N'HD' + CONVERT(NVARCHAR(20), DATEDIFF_BIG(MILLISECOND, '1970-01-01', b.thoi_diem_lap)),
     l.ma_san_pham,
     l.so_luong,
     l.don_gia_ban,
     l.tien_giam_dong,
     l.thanh_tien
-FROM #InvoiceLines l;
+FROM #InvoiceLines l
+         JOIN #InvoiceBase b ON b.invoice_no = l.invoice_no;
 
 -- 3.14 PHAN_BO_XUAT_LO: moi dong ban duoc gan vao lo nhap cua chinh san pham do
 INSERT INTO PHAN_BO_XUAT_LO (ma_hoa_don, ma_san_pham, ma_lo, so_luong_xuat, don_gia_von)

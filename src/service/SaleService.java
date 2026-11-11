@@ -238,12 +238,14 @@ public class SaleService {
       throw new IllegalArgumentException("Mã hóa đơn sai định dạng, phải có dạng HD + số (ví dụ: HD001)");
     hoaDon.setMaHoaDon(requestedInvoiceId == null ? "HD" + System.currentTimeMillis() : requestedInvoiceId);
     hoaDon.setMaNhanVien(request.getMaNhanVien());
-    hoaDon.setMaKhachHang(emptyToNull(request.getMaKhachHang()));
+    String maKhachHang = emptyToNull(request.getMaKhachHang());
+    if (KHACH_LE.equals(maKhachHang))
+      maKhachHang = null;
+    hoaDon.setMaKhachHang(maKhachHang);
     hoaDon.setThoiDiemLap(LocalDateTime.now());
     hoaDon.setTrangThai(TrangThaiHoaDon.DA_THANH_TOAN.name());
     KhachHang customer = null;
-    boolean walkIn = KHACH_LE.equals(hoaDon.getMaKhachHang());
-    if (hoaDon.getMaKhachHang() != null && !walkIn) {
+    if (maKhachHang != null) {
       customer = lock ? khachHangDAO.lock(hoaDon.getMaKhachHang(), connection) : null;
       if (lock
           && (customer == null
