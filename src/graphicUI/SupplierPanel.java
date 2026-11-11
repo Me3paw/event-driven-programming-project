@@ -158,8 +158,13 @@ public final class SupplierPanel extends JPanel {
         form.add(validator.row("Điện thoại", phone));
         form.add(validator.row("Địa chỉ", address));
         validator.require(name, "Tên nhà cung cấp không được để trống.");
-        validator.matches(phone, "\\+?[0-9][0-9 .()\\-]{5,19}",
-                "Số điện thoại sai định dạng.");
+        validator.check(name, text -> text.length() <= 150,
+                "Tên nhà cung cấp không được quá 150 ký tự.");
+        validator.require(phone, "Số điện thoại không được để trống.");
+        validator.matches(phone, "0[35789][0-9]{8}",
+                "Số điện thoại sai định dạng, phải có dạng 0xxxxxxxxx (10 số, đầu số 3/5/7/8/9, ví dụ: 0901234567).");
+        validator.check(address, text -> text.length() <= 255,
+                "Địa chỉ không được quá 255 ký tự.");
         if (!DialogActions.confirm(this, form, existing == null ? "Thêm nhà cung cấp" : "Sửa nhà cung cấp",
                 validator)) return;
         NhaCungCap value = new NhaCungCap();

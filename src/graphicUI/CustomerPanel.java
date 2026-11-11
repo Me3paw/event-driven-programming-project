@@ -200,6 +200,8 @@ public final class CustomerPanel extends JPanel {
         form.add(validator.row("Họ tên", name));
         form.add(validator.row("Điện thoại", phone));
         validator.require(name, "Họ tên khách hàng không được để trống.");
+        validator.matches(name, "[\\p{L}\\s]+",
+                "Họ tên chỉ được chứa chữ cái và khoảng trắng, không chứa số.");
         validator.matches(phone, "0[35789][0-9]{8}",
                 "Số điện thoại sai định dạng, phải có dạng 0xxxxxxxxx (10 số, ví dụ: 0901234567).");
         if (!DialogActions.confirm(this, form, existing == null ? "Thêm khách hàng" : "Sửa khách hàng",

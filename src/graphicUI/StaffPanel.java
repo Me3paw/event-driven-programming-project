@@ -176,6 +176,8 @@ public final class StaffPanel extends JPanel {
         form.add(validator.row("Điện thoại", phone));
         form.add(validator.row("Chức vụ", title));
         validator.require(name, "Họ tên nhân viên không được để trống.");
+        validator.matches(name, "[\\p{L}\\s]+",
+                "Họ tên chỉ được chứa chữ cái và khoảng trắng, không chứa số.");
         validator.require(phone, "Số điện thoại nhân viên không được để trống.");
         validator.matches(phone, "0[35789][0-9]{8}",
                 "Số điện thoại sai định dạng, phải có dạng 0xxxxxxxxx (10 số).");

@@ -5,6 +5,7 @@ final class ValidationRules {
   static final String STORE_PHONE = "[0-9+() .-]{8,20}";
   static final String VN_PHONE = "^0[35789][0-9]{8}$";
   static final String PERSON_NAME = "^[\\p{L}\\s]{1,100}$";
+  static final String USERNAME = "^[A-Za-z0-9_.\\-]{3,50}$";
   static final String PROMOTION_NAME = "^Khuyến mãi[\\p{L}0-9\\s-]*$";
   static final String EMPLOYEE_ID = "NV[0-9]{3}";
   static final String CUSTOMER_ID = "KH[0-9]{3}";

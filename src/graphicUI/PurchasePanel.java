@@ -7,6 +7,7 @@ import components.FormValidator;
 import entity.ChiTietPhieuNhap;
 import entity.NhaCungCap;
 import entity.PhieuNhap;
+import entity.SanPham;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -22,6 +23,7 @@ import java.util.List;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JList;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -29,8 +31,12 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import service.Actor;
 import service.MasterDataService;
 import service.PurchaseService;
@@ -351,21 +357,49 @@ public final class PurchasePanel extends JPanel {
         if (row < -1)
             return;
         DraftLine old = row < 0 ? null : lines.get(row);
-        JTextField product = new JTextField(old == null ? "" : old.productId);
+        final JTextField productSearch = new JTextField(old == null ? "" : old.productId);
+        final JComboBox<SanPham> productBox = new JComboBox<SanPham>();
+        productBox.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public java.awt.Component getListCellRendererComponent(
+                    JList<?> list, Object value, int index, boolean selected, boolean focus) {
+                super.getListCellRendererComponent(list, value, index, selected, focus);
+                if (value instanceof SanPham) {
+                    SanPham found = (SanPham) value;
+                    setText(found.getMaSanPham() + " · " + found.getTenSanPham());
+                }
+                return this;
+            }
+        });
+        JPanel productPicker = new JPanel(new BorderLayout(6, 0));
+        productPicker.setOpaque(false);
+        productSearch.setPreferredSize(new Dimension(140, productSearch.getPreferredSize().height));
+        productPicker.add(productSearch, BorderLayout.WEST);
+        productPicker.add(productBox, BorderLayout.CENTER);
+        productSearch.setToolTipText("Gõ mã hoặc tên để tìm — kết quả tự hiện trong danh sách");
+        productBox.getAccessibleContext().setAccessibleName("Sản phẩm tìm được");
+        final Timer productTimer = new Timer(300,
+                event -> findProducts(productSearch.getText().trim(), productBox, productSearch));
+        productTimer.setRepeats(false);
+        productSearch.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent event) { productTimer.restart(); }
+            @Override public void removeUpdate(DocumentEvent event) { productTimer.restart(); }
+            @Override public void changedUpdate(DocumentEvent event) { productTimer.restart(); }
+        });
+        findProducts(productSearch.getText().trim(), productBox, productSearch);
         JTextField quantity = new JTextField(old == null ? "" : String.valueOf(old.quantity));
         JTextField cost = new JTextField(old == null ? "" : old.unitCost.toPlainString());
         FormValidator validator = new FormValidator();
         JPanel form = FormValidator.form();
-        form.add(validator.row("Mã sản phẩm", product));
+        form.add(validator.row("Mã / tên sản phẩm", productPicker));
         form.add(validator.row("Số lượng", quantity));
         form.add(validator.row("Đơn giá nhập", cost));
-        validator.require(product, "Mã sản phẩm không được để trống.");
-        validator.matches(product, "893[0-9]{9}",
-                "Mã sản phẩm sai định dạng, phải là mã vạch 12 chữ số bắt đầu bằng 893 (ví dụ: 893000000001).");
-        validator.custom(product, () -> {
-            String productId = product.getText().trim();
+        validator.custom(productPicker, () -> {
+            String productId = selectedProductId(productBox, productSearch);
+            if (productId.isEmpty())
+                return "Mã sản phẩm không được để trống.";
             if (!productId.matches("893[0-9]{9}"))
-                return null;
+                return "Mã sản phẩm sai định dạng, phải là mã vạch 12 chữ số bắt đầu bằng 893 (ví dụ: 893000000001).";
             return lines.hasProduct(productId, row)
                     ? "Mỗi sản phẩm chỉ có một dòng trong phiếu nhập." : null;
         });
@@ -399,8 +433,56 @@ public final class PurchasePanel extends JPanel {
             return;
         final int amount = Integer.parseInt(quantity.getText().trim());
         final BigDecimal unitCost = new BigDecimal(cost.getText().trim());
-        final String productId = product.getText().trim();
+        final String productId = selectedProductId(productBox, productSearch);
         lines.set(row, new DraftLine(productId, amount, unitCost));
+    }
+
+    private void findProducts(final String keyword, final JComboBox<SanPham> box,
+            final JTextField source) {
+        new SwingWorker<List<SanPham>, Void>() {
+            @Override
+            protected List<SanPham> doInBackground() throws Exception {
+                return new MasterDataService().timSanPham(actor, keyword, null, "DANG_KINH_DOANH", null, null);
+            }
+            @Override
+            protected void done() {
+                if (source != null && !source.getText().trim().equals(keyword))
+                    return;
+                try {
+                    List<SanPham> found = get();
+                    String previousKey = null;
+                    Object previous = box.getSelectedItem();
+                    if (previous instanceof SanPham)
+                        previousKey = ((SanPham) previous).getMaSanPham();
+                    box.removeAllItems();
+                    for (SanPham value : found)
+                        box.addItem(value);
+                    int select = -1;
+                    if (previousKey != null) {
+                        for (int i = 0; i < box.getItemCount(); i++) {
+                            SanPham item = box.getItemAt(i);
+                            if (item != null && previousKey.equals(item.getMaSanPham())) {
+                                select = i;
+                                break;
+                            }
+                        }
+                    }
+                    if (select < 0)
+                        select = found.isEmpty() ? -1 : 0;
+                    box.setSelectedIndex(select);
+                    if (source != null && !keyword.isEmpty() && box.getItemCount() > 0)
+                        box.setPopupVisible(true);
+                } catch (Exception ignored) {
+                }
+            }
+        }.execute();
+    }
+
+    private String selectedProductId(JComboBox<SanPham> box, JTextField source) {
+        Object selected = box.getSelectedItem();
+        if (selected instanceof SanPham)
+            return ((SanPham) selected).getMaSanPham();
+        return source.getText().trim();
     }
 
     private void delete() {

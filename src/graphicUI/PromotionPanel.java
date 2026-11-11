@@ -8,6 +8,7 @@ import entity.KhuyenMai;
 import entity.SanPham;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.math.BigDecimal;
@@ -20,6 +21,7 @@ import java.util.Set;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JList;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -28,7 +30,11 @@ import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import service.Actor;
 import service.MasterDataService;
 import service.PromotionService;
@@ -148,23 +154,18 @@ public final class PromotionPanel extends JPanel {
         panel.add(new JLabel(value == null ? "" : String.valueOf(value)));
     }
 
-    @SuppressWarnings("unchecked")
     private void edit(final KhuyenMai existing) {
-        new SwingWorker<Object[], Void>() {
+        new SwingWorker<String, Void>() {
             @Override
-            protected Object[] doInBackground() throws Exception {
-                String promotionId = existing == null
+            protected String doInBackground() throws Exception {
+                return existing == null
                         ? new PromotionService().maKhuyenMaiTiepTheo(actor) : existing.getMaKhuyenMai();
-                List<SanPham> catalog = new MasterDataService().timSanPham(
-                        actor, null, null, "DANG_KINH_DOANH", null, null);
-                return new Object[] {promotionId, catalog};
             }
 
             @Override
             protected void done() {
                 try {
-                    Object[] result = get();
-                    editForm((String) result[0], existing, (List<SanPham>) result[1]);
+                    editForm(get(), existing);
                 } catch (Exception exception) {
                     showError("Không tải được dữ liệu khuyến mãi.", exception);
                 }
@@ -172,7 +173,7 @@ public final class PromotionPanel extends JPanel {
         }.execute();
     }
 
-    private void editForm(String generatedId, KhuyenMai existing, List<SanPham> catalog) {
+    private void editForm(String generatedId, KhuyenMai existing) {
         JTextField id = new JTextField(existing == null ? generatedId : existing.getMaKhuyenMai());
         JTextField name = new JTextField(existing == null ? "" : existing.getTenKhuyenMai());
         JTextField rate = new JTextField(existing == null ? "" : existing.getTyLeGiam().toPlainString());
@@ -186,39 +187,74 @@ public final class PromotionPanel extends JPanel {
         JComboBox<String> status = new JComboBox<String>(new String[] {"DANG_HOAT_DONG", "NGUNG_HOAT_DONG"});
         JTextField products = new JTextField(existing == null ? "" : joinProducts(existing.getMaSanPham()));
         products.setColumns(18);
-        JComboBox<String> picker = new JComboBox<String>();
-        if (catalog != null)
-            for (SanPham value : catalog)
-                picker.addItem(UiFormat.joinIdName(value.getMaSanPham(), value.getTenSanPham()));
-        picker.addActionListener(event -> {
-            String productId = UiFormat.idOf(String.valueOf(picker.getSelectedItem()));
-            if (!productId.isEmpty() && !productIds(products.getText()).contains(productId)) {
-                String current = products.getText().trim();
-                products.setText(current.isEmpty() ? productId : current + ", " + productId);
+        final JTextField productQuery = new JTextField(10);
+        final JComboBox<SanPham> productBox = new JComboBox<SanPham>();
+        productBox.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public java.awt.Component getListCellRendererComponent(
+                    JList<?> list, Object value, int index, boolean selected, boolean focus) {
+                super.getListCellRendererComponent(list, value, index, selected, focus);
+                if (value instanceof SanPham) {
+                    SanPham found = (SanPham) value;
+                    setText(found.getMaSanPham() + " · " + found.getTenSanPham());
+                }
+                return this;
             }
-            picker.setSelectedIndex(-1);
         });
+        final boolean[] pickerGuard = {false};
+        productBox.addActionListener(event -> {
+            if (pickerGuard[0])
+                return;
+            Object selected = productBox.getSelectedItem();
+            if (selected instanceof SanPham) {
+                String productId = ((SanPham) selected).getMaSanPham();
+                if (!productIds(products.getText()).contains(productId)) {
+                    String current = products.getText().trim();
+                    products.setText(current.isEmpty() ? productId : current + ", " + productId);
+                }
+                productQuery.setText("");
+                findProducts("", productBox, productQuery, pickerGuard);
+            }
+        });
+        productQuery.setToolTipText("Gõ mã hoặc tên để tìm — chọn kết quả để thêm vào danh sách");
+        productBox.getAccessibleContext().setAccessibleName("Sản phẩm tìm được");
+        final Timer productTimer = new Timer(300,
+                event -> findProducts(productQuery.getText().trim(), productBox, productQuery, pickerGuard));
+        productTimer.setRepeats(false);
+        productQuery.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent event) { productTimer.restart(); }
+            @Override public void removeUpdate(DocumentEvent event) { productTimer.restart(); }
+            @Override public void changedUpdate(DocumentEvent event) { productTimer.restart(); }
+        });
+        findProducts("", productBox, productQuery, pickerGuard);
         JTextField minOrder = new JTextField(existing == null || existing.getDonToiThieu() == null
                 ? "" : existing.getDonToiThieu().toPlainString());
         scope.setSelectedItem(existing == null ? "TOAN_DON" : existing.getPhamVi());
         status.setSelectedItem(existing == null ? "DANG_HOAT_DONG" : existing.getTrangThai());
         id.setEditable(false);
         products.setEnabled("THEO_SAN_PHAM".equals(scope.getSelectedItem()));
+        productQuery.setEnabled("THEO_SAN_PHAM".equals(scope.getSelectedItem()));
+        productBox.setEnabled("THEO_SAN_PHAM".equals(scope.getSelectedItem()));
         minOrder.setEnabled("TOAN_DON".equals(scope.getSelectedItem()));
         scope.addActionListener(event -> {
-            products.setEnabled("THEO_SAN_PHAM".equals(scope.getSelectedItem()));
-            minOrder.setEnabled("TOAN_DON".equals(scope.getSelectedItem()));
+            boolean byProduct = "THEO_SAN_PHAM".equals(scope.getSelectedItem());
+            products.setEnabled(byProduct);
+            productQuery.setEnabled(byProduct);
+            productBox.setEnabled(byProduct);
+            minOrder.setEnabled(!byProduct);
         });
 
-        JPanel productRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        productRow.add(products);
-        productRow.add(picker);
+        JPanel productRow = new JPanel(new BorderLayout(6, 0));
+        productRow.setOpaque(false);
+        productRow.add(productQuery, BorderLayout.WEST);
+        productRow.add(productBox, BorderLayout.CENTER);
         FormValidator validator = new FormValidator();
         JPanel form = FormValidator.form();
         form.add(validator.row("Mã khuyến mãi", id));
         form.add(validator.row("Phạm vi", scope));
         form.add(validator.row("Giá trị tối thiểu (chỉ toàn đơn)", minOrder));
-        form.add(validator.row("Sản phẩm áp dụng (có thể chọn nhiều)", productRow, products));
+        form.add(validator.row("Sản phẩm áp dụng (có thể chọn nhiều)", products));
+        form.add(validator.row("Tìm sản phẩm theo mã / tên", productRow));
         form.add(validator.row("Tên", name));
         form.add(validator.row("Tỷ lệ %", rate));
         form.add(validator.row("Bắt đầu", start));
@@ -245,7 +281,9 @@ public final class PromotionPanel extends JPanel {
             if (text.isEmpty())
                 return "Thời gian bắt đầu không được để trống.";
             try {
-                LocalDateTime.parse(text);
+                LocalDateTime parsed = LocalDateTime.parse(text);
+                if (existing == null && parsed.isBefore(LocalDateTime.now()))
+                    return "Thời gian bắt đầu phải bằng hoặc sau thời điểm tạo khuyến mãi.";
                 return null;
             } catch (DateTimeParseException exception) {
                 return "Ngày giờ phải theo yyyy-MM-ddTHH:mm.";
@@ -341,6 +379,36 @@ public final class PromotionPanel extends JPanel {
                             JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception exception) {
                     showError("Không lưu được khuyến mãi.", exception);
+                }
+            }
+        }.execute();
+    }
+
+    private void findProducts(final String keyword, final JComboBox<SanPham> box,
+            final JTextField source, final boolean[] pickerGuard) {
+        new SwingWorker<List<SanPham>, Void>() {
+            @Override
+            protected List<SanPham> doInBackground() throws Exception {
+                return new MasterDataService().timSanPham(actor, keyword, null, "DANG_KINH_DOANH", null, null);
+            }
+            @Override
+            protected void done() {
+                if (source != null && !source.getText().trim().equals(keyword))
+                    return;
+                try {
+                    List<SanPham> found = get();
+                    pickerGuard[0] = true;
+                    try {
+                        box.removeAllItems();
+                        for (SanPham value : found)
+                            box.addItem(value);
+                        box.setSelectedIndex(found.isEmpty() ? -1 : 0);
+                    } finally {
+                        pickerGuard[0] = false;
+                    }
+                    if (source != null && !keyword.isEmpty() && box.getItemCount() > 0)
+                        box.setPopupVisible(true);
+                } catch (Exception ignored) {
                 }
             }
         }.execute();

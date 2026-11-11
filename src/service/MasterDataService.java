@@ -197,7 +197,11 @@ public class MasterDataService {
   private void luuTaiKhoan(TaiKhoan v, char[] password) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu tài khoản");
-    v.setTenDangNhap(required(v.getTenDangNhap(), "Tên đăng nhập", 50));
+    String username = required(v.getTenDangNhap(), "Tên đăng nhập", 50);
+    if (!ValidationRules.matches(username, ValidationRules.USERNAME))
+      throw new IllegalArgumentException(
+          "Tên đăng nhập chỉ gồm chữ cái, số, dấu _ . - và dài 3-50 ký tự");
+    v.setTenDangNhap(username);
     v.setMaNhanVien(code(v.getMaNhanVien(), "Mã nhân viên", ValidationRules.EMPLOYEE_ID, "NV001"));
     v.setVaiTro(enumValue(v.getVaiTro(), VaiTro.class, "Vai trò"));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiTaiKhoan.class, "Trạng thái tài khoản"));
@@ -207,8 +211,11 @@ public class MasterDataService {
         if (old == null)
           throw new IllegalArgumentException("Mật khẩu tài khoản mới không được để trống");
         v.setMatKhauBam(old.getMatKhauBam());
-      } else
+      } else {
+        if (password.length < 6)
+          throw new IllegalArgumentException("Mật khẩu phải có ít nhất 6 ký tự");
         v.setMatKhauBam(new AuthService().hash(password));
+      }
       taiKhoanDAO.save(v, c);
     } finally {
       if (password != null)
@@ -258,7 +265,7 @@ public class MasterDataService {
       throw new IllegalArgumentException("Thiếu nhà cung cấp");
     v.setMaNhaCungCap(code(v.getMaNhaCungCap(), "Mã nhà cung cấp", ValidationRules.SUPPLIER_ID, "NCC001"));
     v.setTenNhaCungCap(required(v.getTenNhaCungCap(), "Tên nhà cung cấp", 150));
-    v.setSoDienThoai(phone(v.getSoDienThoai(), "Số điện thoại nhà cung cấp"));
+    v.setSoDienThoai(vnPhone(v.getSoDienThoai(), "Số điện thoại nhà cung cấp"));
     v.setDiaChi(optional(v.getDiaChi(), "Địa chỉ", 255));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiHoatDong.class, "Trạng thái nhà cung cấp"));
     try (Connection c = DBConnection.open()) {

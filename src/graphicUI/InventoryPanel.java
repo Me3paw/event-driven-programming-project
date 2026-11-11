@@ -9,6 +9,7 @@ import entity.LoTonKho;
 import entity.SanPham;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
@@ -22,6 +23,7 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
+import javax.swing.JList;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -29,7 +31,11 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import service.Actor;
 import service.InventoryService;
 import service.MasterDataService;
@@ -194,18 +200,16 @@ public final class InventoryPanel extends JPanel {
 
     @SuppressWarnings("unchecked")
     private void adjust() {
-        new SwingWorker<Object[], Void>() {
+        new SwingWorker<String, Void>() {
             @Override
-            protected Object[] doInBackground() throws Exception {
-                return new Object[] {new InventoryService().maDieuChinhTiepTheo(actor),
-                        new MasterDataService().timSanPham(actor, null, null, "DANG_KINH_DOANH", null, null)};
+            protected String doInBackground() throws Exception {
+                return new InventoryService().maDieuChinhTiepTheo(actor);
             }
 
             @Override
             protected void done() {
                 try {
-                    Object[] result = get();
-                    adjustForm((String) result[0], (List<SanPham>) result[1]);
+                    adjustForm(get());
                 } catch (Exception exception) {
                     message("Không tạo được mã phiếu điều chỉnh.", exception);
                 }
@@ -213,23 +217,49 @@ public final class InventoryPanel extends JPanel {
         }.execute();
     }
 
-    private void adjustForm(String generatedId, List<SanPham> products) {
+    private void adjustForm(String generatedId) {
         JTextField id = new JTextField(generatedId);
         id.setEditable(false);
-        JComboBox<String> product = new JComboBox<String>();
-        product.setEditable(true);
-        for (SanPham value : products)
-            product.addItem(UiFormat.joinIdName(value.getMaSanPham(), value.getTenSanPham()));
+        final JTextField productSearch = new JTextField();
+        final JComboBox<SanPham> productBox = new JComboBox<SanPham>();
+        productBox.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public java.awt.Component getListCellRendererComponent(
+                    JList<?> list, Object value, int index, boolean selected, boolean focus) {
+                super.getListCellRendererComponent(list, value, index, selected, focus);
+                if (value instanceof SanPham) {
+                    SanPham found = (SanPham) value;
+                    setText(found.getMaSanPham() + " · " + found.getTenSanPham());
+                }
+                return this;
+            }
+        });
+        JPanel productPicker = new JPanel(new BorderLayout(6, 0));
+        productPicker.setOpaque(false);
+        productSearch.setPreferredSize(new Dimension(140, productSearch.getPreferredSize().height));
+        productPicker.add(productSearch, BorderLayout.WEST);
+        productPicker.add(productBox, BorderLayout.CENTER);
+        productSearch.setToolTipText("Gõ mã hoặc tên để tìm — kết quả tự hiện trong danh sách");
+        productBox.getAccessibleContext().setAccessibleName("Sản phẩm tìm được");
+        final Timer productTimer = new Timer(300,
+                event -> findProducts(productSearch.getText().trim(), productBox, productSearch));
+        productTimer.setRepeats(false);
+        productSearch.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent event) { productTimer.restart(); }
+            @Override public void removeUpdate(DocumentEvent event) { productTimer.restart(); }
+            @Override public void changedUpdate(DocumentEvent event) { productTimer.restart(); }
+        });
+        findProducts("", productBox, productSearch);
         JTextField quantity = new JTextField();
         JTextField reason = new JTextField();
         JPanel form = FormValidator.form();
         FormValidator validator = new FormValidator();
         form.add(validator.row("Mã phiếu điều chỉnh", id));
-        form.add(validator.row("Sản phẩm", product));
+        form.add(validator.row("Mã / tên sản phẩm", productPicker));
         form.add(validator.row("Số lượng giảm", quantity));
         form.add(validator.row("Lý do", reason));
-        validator.custom(product, () -> {
-            String productId = UiFormat.idOf(String.valueOf(product.getEditor().getItem()));
+        validator.custom(productPicker, () -> {
+            String productId = selectedProductId(productBox, productSearch);
             if (productId.isEmpty())
                 return "Mã sản phẩm không được để trống.";
             return productId.matches("893[0-9]{9}") ? null
@@ -252,7 +282,7 @@ public final class InventoryPanel extends JPanel {
         if (!DialogActions.confirm(this, form, "Điều chỉnh giảm FIFO", validator))
             return;
         final String adjustmentId = id.getText().trim();
-        final String productId = UiFormat.idOf(String.valueOf(product.getEditor().getItem()));
+        final String productId = selectedProductId(productBox, productSearch);
         final String adjustmentReason = reason.getText().trim();
         final int amount = Integer.parseInt(quantity.getText().trim());
         new SwingWorker<Void, Void>() {
@@ -303,6 +333,54 @@ public final class InventoryPanel extends JPanel {
                 }
             }
         }.execute();
+    }
+
+    private void findProducts(final String keyword, final JComboBox<SanPham> box,
+            final JTextField source) {
+        new SwingWorker<List<SanPham>, Void>() {
+            @Override
+            protected List<SanPham> doInBackground() throws Exception {
+                return new MasterDataService().timSanPham(actor, keyword, null, "DANG_KINH_DOANH", null, null);
+            }
+            @Override
+            protected void done() {
+                if (source != null && !source.getText().trim().equals(keyword))
+                    return;
+                try {
+                    List<SanPham> found = get();
+                    String previousKey = null;
+                    Object previous = box.getSelectedItem();
+                    if (previous instanceof SanPham)
+                        previousKey = ((SanPham) previous).getMaSanPham();
+                    box.removeAllItems();
+                    for (SanPham value : found)
+                        box.addItem(value);
+                    int select = -1;
+                    if (previousKey != null) {
+                        for (int i = 0; i < box.getItemCount(); i++) {
+                            SanPham item = box.getItemAt(i);
+                            if (item != null && previousKey.equals(item.getMaSanPham())) {
+                                select = i;
+                                break;
+                            }
+                        }
+                    }
+                    if (select < 0)
+                        select = found.isEmpty() ? -1 : 0;
+                    box.setSelectedIndex(select);
+                    if (source != null && !keyword.isEmpty() && box.getItemCount() > 0)
+                        box.setPopupVisible(true);
+                } catch (Exception ignored) {
+                }
+            }
+        }.execute();
+    }
+
+    private String selectedProductId(JComboBox<SanPham> box, JTextField source) {
+        Object selected = box.getSelectedItem();
+        if (selected instanceof SanPham)
+            return ((SanPham) selected).getMaSanPham();
+        return source.getText().trim();
     }
 
     private void message(String text) {

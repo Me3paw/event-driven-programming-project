@@ -119,11 +119,15 @@ public final class AccountPanel extends JPanel {
         form.add(validator.row("Vai trò", role));
         form.add(validator.row(existing == null ? "Mật khẩu" : "Mật khẩu mới", password));
         validator.require(username, "Tên đăng nhập không được để trống.");
+        validator.matches(username, "[A-Za-z0-9_.\\-]{3,50}",
+                "Tên đăng nhập chỉ gồm chữ cái, số, dấu _ . - và dài 3-50 ký tự.");
         validator.require(employee, "Mã nhân viên không được để trống.");
         validator.matches(employee, "NV[0-9]{3}",
                 "Mã nhân viên sai định dạng, phải có dạng NV + đúng 3 số (ví dụ: NV001).");
         if (existing == null)
             validator.require(password, "Mật khẩu không được để trống.");
+        validator.check(password, text -> text.isEmpty() || text.length() >= 6,
+                "Mật khẩu phải có ít nhất 6 ký tự.");
         boolean confirmed = DialogActions.confirm(this, form,
                 existing == null ? "Tạo tài khoản" : "Đặt lại tài khoản", validator);
         final char[] secret = password.getPassword();

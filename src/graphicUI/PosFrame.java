@@ -318,10 +318,6 @@ public final class PosFrame extends JFrame {
         top.setOpaque(false);
         JPanel leftBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 14, 0));
         leftBox.setOpaque(false);
-        JLabel brand = new JLabel("POS · CỬA HÀNG TIỆN LỢI");
-        brand.setForeground(UiTheme.BLUE);
-        brand.setFont(brand.getFont().deriveFont(Font.BOLD, 13f));
-        leftBox.add(brand);
         UiTheme.title(title);
         leftBox.add(title);
         top.add(leftBox, BorderLayout.WEST);
