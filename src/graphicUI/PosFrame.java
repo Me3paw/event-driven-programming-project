@@ -76,6 +76,7 @@ import service.Actor;
 import service.BaoGia;
 import service.DongThanhToan;
 import service.SaleService;
+import service.ThongKeCa;
 import service.YeuCauThanhToan;
 import service.SettingsService;
 import service.MasterDataService;
@@ -357,13 +358,14 @@ public final class PosFrame extends JFrame {
         if (MANAGER.equals(role))
             return new ReportPanel(actor);
         JPanel panel = page();
-        JPanel kpis = new JPanel(new GridLayout(1, 4, 12, 0));
-        kpis.setOpaque(false);
-        kpis.add(kpi("Bán hàng", "Tạo hóa đơn mới", "sale"));
-        kpis.add(kpi("Khách hàng", "Tra cứu khách hàng", "customers"));
-        kpis.add(kpi("Sản phẩm", "Xem tồn kho", "stock"));
-        kpis.add(kpi("Hóa đơn", "Hóa đơn của tôi", "invoices"));
-        panel.add(kpis, BorderLayout.NORTH);
+        JPanel stats = new JPanel(new GridLayout(1, 5, 12, 0));
+        stats.setOpaque(false);
+        final JLabel revenueValue = statCard(stats, "Doanh thu hôm nay");
+        final JLabel cashValue = statCard(stats, "Tiền mặt");
+        final JLabel cardValue = statCard(stats, "Thẻ / chuyển khoản");
+        final JLabel invoiceValue = statCard(stats, "Số hóa đơn");
+        final JLabel customerValue = statCard(stats, "Khách mua hàng");
+        panel.add(stats, BorderLayout.NORTH);
         JPanel content = new JPanel(new BorderLayout(0, 14));
         content.setOpaque(false);
         JPanel quickActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
@@ -374,6 +376,29 @@ public final class PosFrame extends JFrame {
         quickActions.add(actionButton("Xem hóa đơn của tôi", "invoices"));
         content.add(quickActions, BorderLayout.CENTER);
         panel.add(content, BorderLayout.CENTER);
+        new SwingWorker<ThongKeCa, Void>() {
+            @Override
+            protected ThongKeCa doInBackground() throws Exception {
+                return new SaleService().thongKeCa(actor);
+            }
+            @Override
+            protected void done() {
+                try {
+                    ThongKeCa statsToday = get();
+                    revenueValue.setText(UiFormat.money(statsToday.getDoanhThu()));
+                    cashValue.setText(UiFormat.money(statsToday.getTienMat()));
+                    cardValue.setText(UiFormat.money(statsToday.getTienThe()));
+                    invoiceValue.setText(String.valueOf(statsToday.getSoHoaDon()));
+                    customerValue.setText(String.valueOf(statsToday.getSoKhachMua()));
+                } catch (Exception exception) {
+                    revenueValue.setText("—");
+                    cashValue.setText("—");
+                    cardValue.setText("—");
+                    invoiceValue.setText("—");
+                    customerValue.setText("—");
+                }
+            }
+        }.execute();
         return panel;
     }
 
@@ -449,18 +474,21 @@ public final class PosFrame extends JFrame {
         return name + " · " + (actor.isQuanLy() ? "Quản lý" : "Thu ngân");
     }
 
-    private JButton kpi(String text, String value, final String pageKey) {
-        JButton card = new JButton("<html><div style='text-align:left'><font color='#64748B'>"
-                + text + "</font><br><b>" + value + "</b></div></html>");
-        card.setHorizontalAlignment(SwingConstants.LEFT);
-        card.setVerticalAlignment(SwingConstants.TOP);
+    private JLabel statCard(JPanel parent, String caption) {
+        JPanel card = new JPanel(new BorderLayout());
         card.setBackground(Color.WHITE);
         card.setBorder(UiTheme.CARD);
-        card.setFocusPainted(false);
-        card.setContentAreaFilled(true);
-        card.setOpaque(true);
-        card.addActionListener(event -> showPage(pageKey, card));
-        return card;
+        JPanel wrap = new JPanel(new BorderLayout(0, 6));
+        wrap.setOpaque(false);
+        JLabel titleLabel = new JLabel(caption);
+        titleLabel.setForeground(UiTheme.MUTED);
+        JLabel value = new JLabel("…");
+        value.setFont(value.getFont().deriveFont(Font.BOLD, 20f));
+        wrap.add(titleLabel, BorderLayout.NORTH);
+        wrap.add(value, BorderLayout.CENTER);
+        card.add(wrap, BorderLayout.CENTER);
+        parent.add(card);
+        return value;
     }
 
     private static void place(JPanel panel, java.awt.Component component, int x, int y,

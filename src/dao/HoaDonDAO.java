@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import service.ThongKeCa;
 
 public class HoaDonDAO {
   public void save(HoaDon h, Connection c) throws SQLException {
@@ -163,6 +164,30 @@ public class HoaDonDAO {
     List<HoaDon> out = new ArrayList<HoaDon>();
     for (String id : ids) out.add(detail(id, c));
     return out;
+  }
+  public ThongKeCa thongKeCa(String maNhanVien, LocalDate ngay, Connection c)
+      throws SQLException {
+    ThongKeCa stats = new ThongKeCa();
+    String q = "SELECT COUNT(*), COALESCE(SUM(tong_thanh_toan),0), "
+        + "COALESCE(SUM(CASE WHEN phuong_thuc_tt='TIEN_MAT' THEN tong_thanh_toan ELSE 0 END),0), "
+        + "COALESCE(SUM(CASE WHEN phuong_thuc_tt<>'TIEN_MAT' THEN tong_thanh_toan ELSE 0 END),0), "
+        + "COUNT(DISTINCT CASE WHEN ma_khach_hang IS NOT NULL AND ma_khach_hang<>'KH000' "
+        + "THEN ma_khach_hang END) FROM HOA_DON WHERE ma_nhan_vien=? AND trang_thai='DA_THANH_TOAN' "
+        + "AND CAST(thoi_diem_lap AS DATE)=?";
+    try (PreparedStatement s = c.prepareStatement(q)) {
+      s.setString(1, maNhanVien);
+      s.setDate(2, java.sql.Date.valueOf(ngay));
+      try (ResultSet r = s.executeQuery()) {
+        if (r.next()) {
+          stats.setSoHoaDon(r.getLong(1));
+          stats.setDoanhThu(r.getBigDecimal(2));
+          stats.setTienMat(r.getBigDecimal(3));
+          stats.setTienThe(r.getBigDecimal(4));
+          stats.setSoKhachMua(r.getLong(5));
+        }
+      }
+    }
+    return stats;
   }
   public List<HoaDon> byCustomer(String maKhachHang, Connection c) throws SQLException {
     List<HoaDon> out = new ArrayList<HoaDon>();

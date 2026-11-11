@@ -196,6 +196,13 @@ public class SaleService {
     }
   }
 
+  public ThongKeCa thongKeCa(Actor actor) throws SQLException {
+    Access.actor(actor);
+    try (Connection connection = DBConnection.open()) {
+      return hoaDonDAO.thongKeCa(actor.getMaNhanVien(), LocalDate.now(), connection);
+    }
+  }
+
   public int tonKho(Actor actor, String maSanPham) throws SQLException {
     Access.actor(actor);
     if (!valid(maSanPham))
