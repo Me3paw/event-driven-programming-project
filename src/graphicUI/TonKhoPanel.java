@@ -279,7 +279,7 @@ public final class TonKhoPanel extends JPanel {
             }
         });
         validator.require(reason, "Lý do điều chỉnh không được để trống.");
-        if (!DialogActions.confirm(this, form, "Điều chỉnh giảm FIFO", validator))
+        if (!DialogActions.confirm(this, form, "Điều chỉnh giảm", validator))
             return;
         final String adjustmentId = id.getText().trim();
         final String productId = maSanPhamDaChon(productBox, productSearch);
