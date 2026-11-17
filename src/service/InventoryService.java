@@ -33,7 +33,7 @@ public class InventoryService {
       throw new IllegalArgumentException("Mã sản phẩm sai định dạng, phải là mã vạch 12 chữ số bắt đầu bằng 893 (ví dụ: 893000000001)");
     if (Access.blankToNull(lyDo) == null || lyDo.trim().length() > 255)
       throw new IllegalArgumentException("Phải nhập lý do điều chỉnh");
-    giamTonFifo(maDieuChinh, actor.getMaNhanVien(), maSanPham, soLuong, lyDo.trim());
+    giamTonFifo(actor, maDieuChinh, actor.getMaNhanVien(), maSanPham, soLuong, lyDo.trim());
   }
   public String maDieuChinhTiepTheo(Actor actor) throws SQLException {
     Access.manager(actor);
@@ -61,12 +61,12 @@ public class InventoryService {
       return loDAO.search(keyword, c);
     }
   }
-  private void giamTonFifo(String maDieuChinh, String maNhanVien, String maSanPham, int soLuong,
+  private void giamTonFifo(Actor actor, String maDieuChinh, String maNhanVien, String maSanPham, int soLuong,
       String lyDo) throws SQLException {
     if (soLuong <= 0)
       throw new IllegalArgumentException("Số lượng giảm không hợp lệ");
-    try (Connection c = DBConnection.open()) {
-      c.setAutoCommit(false);
+    try (SessionTransaction transaction = new SessionTransaction(actor, true, false)) {
+      Connection c = transaction.connection();
       try {
         SanPham product = sanPhamDAO.find(maSanPham, c);
         if (product == null || !TrangThaiSanPham.DANG_KINH_DOANH.name().equals(product.getTrangThai()))
@@ -94,12 +94,10 @@ public class InventoryService {
         for (Map.Entry<Long, Integer> e : phanBo.entrySet())
           loDAO.change(e.getKey(), -e.getValue(), c);
         phieuDieuChinhDAO.save(phieuDieuChinh, c);
-        c.commit();
+        transaction.commit();
       } catch (RuntimeException | SQLException e) {
         c.rollback();
         throw e;
-      } finally {
-        c.setAutoCommit(true);
       }
     }
   }

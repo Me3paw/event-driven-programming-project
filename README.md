@@ -1,230 +1,70 @@
 # Quản lý bán hàng tại cửa hàng tiện lợi
 
-Bài tập lớn LTHSK Java năm học 2025–2026. Chương trình được xây dựng cho nhân viên cửa hàng tiện lợi.
+Bài tập lớn LTHSK Java năm học 2025–2026. Dự án dùng **Java 17, Java Swing, JDBC và Microsoft SQL Server**, theo mô hình `graphicUI → service → dao`. Entity chứa dữ liệu, service kiểm tra quyền và điều phối transaction, DAO truy cập JDBC.
 
-Dự án dùng Java 8, Java Swing và mô hình ba lớp. Cơ sở dữ liệu chính thức của dự án là MariaDB theo chấp thuận của giảng viên, thay cho SQL Server trong đề bài gốc.
+Các chức năng gồm đăng nhập/phân quyền, danh mục, nhân sự/tài khoản, khách hàng, nhà cung cấp, nhập hàng, tồn theo lô FIFO, điều chỉnh giảm tồn, bán hàng, hủy/xem hóa đơn, khuyến mãi, tích điểm/VAT và báo cáo. Không có ứng dụng người mua hoặc cổng thanh toán thật.
 
-## Chức năng của đề tài
+## Chạy trên Linux
 
-- Đăng nhập và phân quyền quản lý, nhân viên bán hàng.
-- Quản lý nhân viên, loại sản phẩm, sản phẩm và khách hàng.
-- Thêm, sửa, xóa, xem danh sách và xem chi tiết dữ liệu.
-- Tìm kiếm đơn giản theo từ khóa và tìm kiếm nâng cao theo nhiều điều kiện.
-- Lập hóa đơn, kiểm tra tồn kho, nhận tiền và tính tiền thừa.
-- Xem, tìm kiếm, hủy và in hóa đơn.
-- Thống kê doanh thu, số hóa đơn, sản phẩm bán chạy và sản phẩm sắp hết.
-- Phím tắt: `F2` mở POS, `Ctrl+F` đặt focus ô tìm kiếm, `Ctrl+S` lưu dialog chỉnh sửa đang mở, `Esc` đóng dialog; hỗ trợ chuyển ô nhập liệu bằng phím Tab.
-
-Khi lưu hóa đơn, chương trình phải lưu chi tiết hóa đơn và trừ tồn kho cùng lúc. Nếu có lỗi thì toàn bộ thao tác phải được hủy để dữ liệu không bị sai.
-
-Đề tài có chức năng nhập hàng, nhà cung cấp, khuyến mãi, tích điểm, thanh toán điện tử mô phỏng, thống kê hàng hóa/thu chi, CRM nội bộ và tính thuế trên đơn hàng. Chương trình không có bán hàng trực tuyến hoặc ứng dụng cho người mua.
-
-## Công nghệ sử dụng
-
-- Eclipse Java Project thông thường, không dùng Maven hoặc Gradle.
-- Java 8 và Java Swing.
-- MariaDB.
-- MariaDB Connector/J `3.5.7` tại `lib/mariadb-java-client-3.5.7.jar`.
-- Mã nguồn và dữ liệu tiếng Việt dùng UTF-8.
-
-## Cấu trúc mã nguồn hiện tại
-
-```text
-src/
-├── components/
-├── connectDB/
-│   └── DBConnection.java
-├── dao/
-├── entity/
-├── service/
-├── testsupport/
-└── graphicUI/
-    ├── PosApplication.java
-    └── PosFrame.java
-```
-
-- `graphicUI` chứa đăng nhập, điều hướng và các màn hình nghiệp vụ Swing.
-- `service` kiểm tra quyền theo `Actor`, điều phối transaction và gọi DAO.
-- `dao` chỉ truy cập JDBC; `entity` chứa dữ liệu; `connectDB` đọc cấu hình kết nối.
-- `testsupport` chứa smoke backend và kiểm thử transaction/concurrency tự dọn fixture.
-
-## Trạng thái hiện tại
-
-Dự án hiện có schema MariaDB 17 bảng, đăng nhập/phân quyền, danh mục/khách hàng/nhà cung cấp/nhân sự, nhập hàng-lô FIFO, điều chỉnh tồn, bán hàng-hủy/in hóa đơn, khuyến mãi/điểm/VAT, CRM và báo cáo typed. Service kiểm tra quyền ngoài giao diện; checkout có transaction và retry hữu hạn khi MariaDB báo lỗi tranh chấp tạm thời.
-
-Các màn hình Swing hiện là phần hiện thực đang kiểm thử; ảnh và mô tả Phần 4 vẫn cần chuẩn bị khi nộp.
-
-## Chuẩn bị trên Linux
-
-Máy cần có Docker. Bộ công cụ cục bộ không thay đổi Java đang dùng của hệ thống.
-
-Tại thư mục gốc của dự án, chạy:
+Cần Docker Compose và JDK 17. Bộ chạy ưu tiên `/usr/lib/jvm/java-17-openjdk`; nếu JDK nằm nơi khác, đặt `POS_JAVA_HOME` tới thư mục JDK 17. Không thay đổi Java mặc định của máy.
 
 ```bash
 ./dev setup
 ./dev smoke
-./dev backend-test
-./dev eclipse
-```
-
-- `setup` tải Java 8, Eclipse và MariaDB cần cho dự án.
-- `smoke` chỉ biên dịch và kiểm tra kết nối database bằng `SELECT 1`.
-- `backend-test` chạy smoke quyền, kiểm thử transaction/FIFO/làm tròn/concurrency và tự dọn fixture tạm.
-- `eclipse` mở Eclipse với workspace riêng của dự án.
-
-Khi không còn làm dự án, có thể xóa môi trường cục bộ bằng:
-
-```bash
-./dev wipe
-```
-
-Lệnh này xóa Java 8, Eclipse, file biên dịch và dữ liệu MariaDB của riêng dự án. Image MariaDB dùng chung của Docker vẫn được giữ lại.
-
-## Chuẩn bị Eclipse trên Windows
-
-Tập tin `dev` chỉ dùng cho Linux. Trên Windows, cài và cấu hình thủ công như sau:
-
-1. Cài JDK 8. Có thể dùng Eclipse Temurin 8 từ trang [Adoptium](https://adoptium.net/temurin/releases/?version=8).
-2. Tải bản **Eclipse IDE for Java Developers** từ trang [Eclipse Packages](https://www.eclipse.org/downloads/packages/).
-3. Mở Eclipse, chọn **Window > Preferences > Java > Installed JREs**.
-4. Chọn **Add... > Standard VM**, rồi chọn thư mục JDK 8 vừa cài.
-5. Đặt tên JDK là `Temurin 8` hoặc `JDK 8`, sau đó đánh dấu JDK này làm mặc định.
-6. Trong **Java > Installed JREs > Execution Environments**, gán JDK 8 cho `JavaSE-1.8`.
-7. Đặt mã hóa workspace tại **General > Workspace > Text file encoding > UTF-8**.
-8. Import dự án theo hướng dẫn ở phần tiếp theo.
-
-Trên Windows, có thể chạy MariaDB bằng Docker Desktop hoặc cài MariaDB trực tiếp. Các thành viên phải dùng cùng cấu trúc database trong `sql/Script.sql`.
-
-## Import dự án vào Eclipse
-
-1. Chọn **File > Import...**.
-2. Mở nhóm **General** và chọn **Existing Projects into Workspace**.
-3. Chọn **Select root directory**.
-4. Chọn thư mục chứa `.project`, `.classpath`, `src` và `lib`.
-5. Đánh dấu dự án `POS-Cua-Hang-Tien-Loi`.
-6. Không chọn **Copy projects into workspace** nếu đang mở trực tiếp thư mục đã clone.
-7. Chọn **Finish** và chờ Eclipse build xong.
-
-Trong Project Explorer cần thấy:
-
-- `JRE System Library [JavaSE-1.8]`.
-- `mariadb-java-client-3.5.7.jar` trong **Referenced Libraries**.
-
-Nếu thiếu JAR MariaDB, nhấp phải dự án, chọn **Properties > Java Build Path > Libraries > Classpath > Add JARs...**, rồi chọn file JAR trong thư mục `lib`.
-
-## Chạy chương trình
-
-1. Mở `src/graphicUI/PosApplication.java`.
-2. Nhấp phải trong file và chọn **Run As > Java Application**.
-3. Cửa sổ `POS Cửa Hàng Tiện Lợi` sẽ xuất hiện.
-
-Trên Linux cũng có thể chạy từ terminal:
-
-```bash
 ./dev run
 ```
 
-## MariaDB dùng cho dự án
+- `setup` khởi động SQL Server 2022 Developer bằng image chính thức của Microsoft, nạp schema/dữ liệu mẫu vào database mới và biên dịch Java 17.
+- Lần đầu chạy, `dev` tạo `.env` riêng với mật khẩu ngẫu nhiên. File này bị Git bỏ qua; không chia sẻ thông tin đăng nhập thật.
+- `smoke` kiểm tra biên dịch và kết nối JDBC bằng `SELECT 1`; không phải kiểm thử toàn bộ nghiệp vụ.
+- `build` chỉ biên dịch. `db-up` khởi động/kiểm tra SQL Server; `db-down` dừng riêng SQL Server.
+- `backend-test` chạy hai bộ regression Java 17 trên SQL Server thật, dùng database riêng mặc định `pos_test_audit_20261117`. Tên kiểm thử bắt buộc có tiền tố `pos_test_`; cả runner và Java kiểm tra trước khi ghi. Không chạy fixture vào database phát triển.
+- `gui-test` chạy đăng nhập Swing, báo giá cũ/mới, thanh toán trùng, mất phản hồi commit, lỗi hóa đơn sau thanh toán và đăng nhập lại bằng Xvfb riêng. Cần `xvfb-run` và `timeout`; ảnh ở `.dev/audit-fixes/gui/`.
+- Fixture dùng tài khoản app đọc/ghi; riêng kiểm thử migration/sequence dùng quản trị container. Mỗi bộ so sánh toàn bộ dữ liệu 17 bảng trước/sau cleanup, kể cả ca cố ý ném lỗi. Sequence/identity có thể tăng và để khoảng trống hợp lệ.
+- `eclipse` mở Eclipse với workspace riêng và cấu hình JDK 17.
 
-Trên Linux, khởi động database bằng:
+SQL Server chỉ mở trên `127.0.0.1:14330`, container dùng volume `pos-sqlserver-data`. Volume MariaDB cũ được giữ nguyên. Không tự xóa volume hay nạp lại script khi database đã tồn tại. `setup`, `db-up`, `run` và `smoke` áp dụng migration bổ sung cột/sequence tại `sql/migrations/20261117_audit.sql`; migration không xóa hay tính lại dữ liệu nghiệp vụ.
 
-```bash
-./dev db-up
-```
+Script chính là `sql/ScriptMySql.sql`. **Tên file được giữ nguyên từ nhánh hiện tại nhưng nội dung là T-SQL cho Microsoft SQL Server**, không phải MySQL/MariaDB. Script tạo 17 bảng và dữ liệu mẫu. Chạy lại trực tiếp sẽ xóa các bảng cũ; bộ chạy chỉ nạp tự động khi chưa có database.
 
-Cấu hình cục bộ mặc định:
-
-```text
-Địa chỉ: 127.0.0.1
-Cổng: 3307
-Database: cua_hang_tien_loi
-Tài khoản: cua_hang_app
-Mật khẩu: cua_hang_dev
-```
-
-Tài khoản dữ liệu mẫu chỉ dành cho môi trường phát triển:
+Ứng dụng đọc ba biến môi trường:
 
 ```text
-Quản lý: quanly / MatKhau123
-Thu ngân: thungan / MatKhau123
+POS_DB_URL=jdbc:sqlserver://127.0.0.1:14330;databaseName=cua_hang_tien_loi;encrypt=true;trustServerCertificate=true
+POS_DB_USER=cua_hang_app
+POS_DB_PASSWORD=<giá trị trong .env>
 ```
 
-`compose.yaml` tạo MariaDB với database `cua_hang_tien_loi`; ứng dụng chỉ nhận đúng ba biến `POS_DB_URL`, `POS_DB_USER` và `POS_DB_PASSWORD`. `./dev wipe` xóa volume của dự án, nên lần `./dev db-up` hoặc `./dev smoke` tiếp theo sẽ nạp lại `sql/Script.sql`.
+`trustServerCertificate=true` dành cho container phát triển cục bộ. Ứng dụng dùng login riêng với quyền đọc/ghi dữ liệu; không dùng tài khoản quản trị `sa`.
 
-Để kiểm tra kết nối trong Eclipse, mở **Run > Run Configurations...**, chọn cấu hình `PosApplication` và thêm:
+Tài khoản ứng dụng mẫu: `quanly`, `thungan01`, `thungan02`, `thungan03`, `thungan04`; mật khẩu mẫu là `MatKhau123`.
 
-- Program argument: `--db-smoke`
-- `POS_DB_URL`: `jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi`
-- `POS_DB_USER`: `cua_hang_app`
-- `POS_DB_PASSWORD`: `cua_hang_dev`
+## Eclipse và Windows
 
-Các thông tin trên chỉ dùng để phát triển cục bộ. Không đưa mật khẩu hoặc thông tin kết nối thật vào Git.
+1. Cài JDK 17 và Eclipse Java. Import bằng **Existing Projects into Workspace** tại thư mục chứa `.project` và `.classpath`.
+2. Gán JDK 17 cho **JavaSE-17**, đặt mã hóa UTF-8. Driver đã có tại `lib/mssql-jdbc-13.2.0.jre11.jar`; hậu tố `jre11` tương thích runtime Java 17.
+3. Khởi động SQL Server trên Windows hoặc dùng Docker, nạp `sql/ScriptMySql.sql` vào database mới, sau đó chạy `sql/migrations/20261117_audit.sql` trong database đó. Với database có dữ liệu, chỉ chạy migration. Tài khoản app cần quyền đọc/ghi và `GRANT UPDATE ON OBJECT::dbo.POS_SEQ_<tiền tố> TO [tài khoản app]` cho NV/KH/KM/LSP/NCC/PN/DC/HD.
+4. Đặt `POS_DB_URL`, `POS_DB_USER`, `POS_DB_PASSWORD` trong Run Configuration theo máy đang dùng.
+5. Chạy `graphicUI.PosApplication`. Đối số `--db-smoke` chỉ kiểm tra kết nối.
 
-## Nếu muốn dùng SQL Server
+Không dùng MariaDB để thay thế SQL Server khi kiểm thử nhánh này: DAO sử dụng T-SQL và cơ chế khóa của SQL Server.
 
-Phần này chỉ dành cho người muốn tự chạy thử dự án với SQL Server. Dự án chính và `sql/Script.sql` vẫn dùng MariaDB.
+## Tài liệu và tình trạng kiểm thử
 
-Không thể chỉ đổi địa chỉ kết nối vì MariaDB và SQL Server có khác biệt về driver, kiểu dữ liệu và câu lệnh tạo bảng. Muốn dùng SQL Server cần:
+Đặc tả ở [docs/DAC_TA_HE_THONG.md](docs/DAC_TA_HE_THONG.md), sơ đồ ở `docs/diagrams/`. Báo cáo cần có yêu cầu, sơ đồ lớp, thiết kế CSDL và ảnh/mô tả giao diện thực tế. Một lần biên dịch/kết nối thành công không chứng minh các yêu cầu nghiệp vụ đã đạt.
 
-1. Tải [Microsoft JDBC Driver for SQL Server](https://learn.microsoft.com/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server) và lấy file JAR dành cho Java 8, có tên kết thúc bằng `.jre8.jar`.
-2. Đặt file JAR trong `lib` và thêm nó vào **Java Build Path** của Eclipse.
-3. Dùng URL kết nối SQL Server, ví dụ:
+Phím tắt được thiết kế: `F2` bán hàng, `Ctrl+F` tìm kiếm, `Ctrl+S` lưu dialog, `Esc` đóng dialog. Quyết định và kết quả sửa audit ở [docs/audit/implementation-2026-11-17.md](docs/audit/implementation-2026-11-17.md). DOCX được giữ nguyên để audit riêng sau.
 
-   ```text
-   jdbc:sqlserver://localhost:1433;databaseName=cua_hang_tien_loi;encrypt=true;trustServerCertificate=true
-   ```
+Làm việc trên nhánh tính năng/sửa lỗi và tạo Pull Request trước khi merge vào `main`.
 
-4. Tạo một bản script riêng theo cú pháp SQL Server. Không ghi đè `sql/Script.sql` của MariaDB.
-5. Giữ nguyên ba biến `POS_DB_URL`, `POS_DB_USER` và `POS_DB_PASSWORD` khi tạo Run Configuration.
-
-`trustServerCertificate=true` chỉ phù hợp khi thử trên máy cá nhân với chứng chỉ tự ký. Không dùng tùy chọn này cho máy chủ thật.
-
-`DBConnection.java` hiện đọc URL, tài khoản và mật khẩu từ biến môi trường, nên không cần sửa. Tuy nhiên, các lớp `dao` có câu lệnh riêng của MariaDB vẫn có thể cần điều chỉnh khi chạy với SQL Server.
-
-## Tài liệu cần nộp
-
-1. Thu thập và phân tích yêu cầu.
-2. Sơ đồ lớp và mô tả các ràng buộc.
-3. Sơ đồ cơ sở dữ liệu và mô tả các ràng buộc.
-4. Ảnh và mô tả các màn hình chính của chương trình.
-
-Tài liệu phải ghi rõ MariaDB được dùng thay SQL Server theo chấp thuận của giảng viên.
-
-Đặc tả chi tiết Phần 1–3 nằm tại [docs/DAC_TA_HE_THONG.md](docs/DAC_TA_HE_THONG.md).
-
-## Làm việc với GitHub
-
-- Không làm tính năng trực tiếp trên nhánh `main`.
-- Dùng nhánh `feature/`, `fix/` hoặc `docs/` phù hợp với thay đổi.
-- Commit ngắn gọn và đúng nội dung.
-- Push nhánh lên GitHub, tạo Pull Request và chờ kiểm tra trước khi merge.
-
-Ví dụ:
+## Kiểm thử riêng
 
 ```bash
-git switch main
-git pull origin main
-git switch -c feature/quan-ly-san-pham
+./dev backend-test
+./dev backend-test  # chạy lại để kiểm tra cleanup và fixture độc lập
+./dev gui-test
+# Dùng một database kiểm thử mới khác nếu cần:
+POS_TEST_DB_NAME=pos_test_fresh ./dev backend-test
 ```
 
-## Lỗi thường gặp
-
-### Eclipse không nhận dự án
-
-Kiểm tra thư mục được chọn có chứa `.project` và `.classpath`. Không chọn thư mục `src` làm thư mục gốc.
-
-### Có dấu X đỏ sau khi import
-
-Chọn **Project > Clean...**, sau đó kiểm tra lại Java 8 và file JAR trong **Java Build Path**.
-
-### Không tìm thấy `graphicUI.PosApplication`
-
-Nhấp phải thư mục `src` và chọn **Build Path > Use as Source Folder**.
-
-### Chữ tiếng Việt bị lỗi
-
-Nhấp phải dự án, chọn **Properties > Resource**, rồi đặt **Text file encoding** thành `UTF-8`.
-
-### Không kết nối được database
-
-Kiểm tra database đang chạy, cổng kết nối, tên database, tài khoản, mật khẩu và driver JDBC trong **Java Build Path**.
+Khuyến mãi toàn đơn giữ ngưỡng dương bắt buộc. Cho phép giá bán/nhập 0đ và đổi từng điểm thưởng. Bản ghi chưa có tham chiếu được xóa theo quyền hiện có; chứng từ và tham chiếu lịch sử được giữ. Khóa/nghỉ việc/đổi vai trò có hiệu lực ở thao tác được bảo vệ kế tiếp, theo thứ tự khóa transaction đã mô tả trong đặc tả.

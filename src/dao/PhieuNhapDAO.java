@@ -18,7 +18,7 @@ public class PhieuNhapDAO {
     BigDecimal total = BigDecimal.ZERO;
     for (ChiTietPhieuNhap d : p.getChiTiet()) {
       if (d == null || d.getMaSanPham() == null || d.getMaSanPham().trim().isEmpty()
-          || d.getDonGiaNhap() == null || d.getSoLuong() <= 0 || d.getDonGiaNhap().signum() <= 0)
+          || d.getDonGiaNhap() == null || d.getSoLuong() <= 0 || d.getDonGiaNhap().signum() < 0)
         throw new IllegalArgumentException("Chi tiết nhập không hợp lệ");
       total = total.add(d.getDonGiaNhap().multiply(BigDecimal.valueOf(d.getSoLuong())));
     }
@@ -136,17 +136,7 @@ public class PhieuNhapDAO {
     }
   }
   public String nextId(Connection c) throws SQLException {
-    try (PreparedStatement s = c.prepareStatement("SELECT MAX(ma_phieu_nhap) FROM PHIEU_NHAP")) {
-      try (ResultSet r = s.executeQuery()) {
-        int next = 1;
-        if (r.next()) {
-          String max = r.getString(1);
-          if (max != null && max.matches("PN[0-9]+"))
-            next = Integer.parseInt(max.substring(2)) + 1;
-        }
-        return String.format("PN%03d", next);
-      }
-    }
+    return IdDAO.next("PN", c);
   }
   public List<PhieuNhap> search(String keyword, String trangThai, Connection c)
       throws SQLException {

@@ -4,6 +4,21 @@ import entity.TaiKhoan;
 import entity.VaiTro;
 
 public final class Actor {
+
+  private long accountVersion;
+  private long employeeVersion;
+  public long getAccountVersion() { return accountVersion; }
+  public long getEmployeeVersion() { return employeeVersion; }
+  private volatile boolean invalid;
+  public boolean isInvalid() { return invalid; }
+  private Runnable invalidationHandler;
+  public void onInvalidated(Runnable handler) { invalidationHandler = handler; }
+  void invalidate() {
+    if (invalid) return;
+    invalid = true;
+    Runnable handler = invalidationHandler;
+    if (handler != null) handler.run();
+  }
   private final String tenDangNhap;
   private final String maNhanVien;
   private final String vaiTro;
@@ -14,6 +29,8 @@ public final class Actor {
     if (taiKhoan == null || blank(taiKhoan.getTenDangNhap())
         || blank(taiKhoan.getMaNhanVien()) || !validRole(taiKhoan.getVaiTro()))
       throw new IllegalArgumentException("Thông tin phiên đăng nhập không hợp lệ");
+    accountVersion = taiKhoan.getAccountVersion();
+    employeeVersion = taiKhoan.getEmployeeVersion();
     tenDangNhap = taiKhoan.getTenDangNhap();
     maNhanVien = taiKhoan.getMaNhanVien();
     vaiTro = taiKhoan.getVaiTro();

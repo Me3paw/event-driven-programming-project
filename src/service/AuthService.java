@@ -39,13 +39,15 @@ public class AuthService {
   public void doiMatKhau(Actor actor, char[] matKhauCu, char[] matKhauMoi) throws SQLException {
     if (actor == null || actor.getTenDangNhap() == null)
       throw new SecurityException("Chưa đăng nhập");
-    try (Connection connection = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(actor, false, false)) {
+      Connection connection = transaction.connection();
       TaiKhoan taiKhoan = taiKhoanDAO.find(actor.getTenDangNhap(), connection);
       if (taiKhoan == null || !verify(matKhauCu, taiKhoan.getMatKhauBam()))
         throw new SecurityException("Mật khẩu hiện tại không đúng");
       if (matKhauMoi == null || matKhauMoi.length < 6)
         throw new IllegalArgumentException("Mật khẩu mới phải có ít nhất 6 ký tự");
       taiKhoanDAO.updatePassword(actor.getTenDangNhap(), hash(matKhauMoi), connection);
+      transaction.commit();
     } finally {
       if (matKhauCu != null)
         Arrays.fill(matKhauCu, '\0');

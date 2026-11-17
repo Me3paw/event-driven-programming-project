@@ -1,5 +1,5 @@
 @startuml
-title So do lop as-built - Java Swing va MariaDB
+title So do lop as-built - Java Swing va Microsoft SQL Server
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
 
@@ -22,11 +22,14 @@ package components {
   class BarChart
   class DialogActions
   class ReceiptPrintable
+  class ReceiptPrinting
   class UiTheme
 }
 
 package service {
   class Access
+  class SessionTransaction
+  class CheckoutFingerprint
   class Actor {
     +getTenDangNhap(): String
     +getMaNhanVien(): String
@@ -81,6 +84,7 @@ package service {
     +luu(actor: Actor, value: KhuyenMai): void
   }
   class SaleService {
+    +maHoaDonTiepTheo(actor: Actor): String
     +baoGia(actor: Actor, request: YeuCauThanhToan): BaoGia
     +thanhToan(actor: Actor, request: YeuCauThanhToan): HoaDon
     +activePromotions(actor: Actor, products: Set<String>, time: LocalDateTime): List<KhuyenMai>
@@ -118,6 +122,7 @@ package dao {
   class CauHinhCuaHangDAO
   class DieuChinhTonDAO
   class HoaDonDAO
+  class IdDAO
   class KhachHangDAO
   class KhuyenMaiDAO
   class LoaiSanPhamDAO
@@ -266,4 +271,11 @@ HoaDon *-- PhanBoXuatLo
 PhanBoXuatLo --> LoTonKho
 KhuyenMai --> KhuyenMaiSanPham
 KhuyenMaiSanPham --> SanPham
+ReceiptPrinting --> ReceiptPrintable
+SaleService --> SessionTransaction
+SaleService --> CheckoutFingerprint
+SaleService --> IdDAO
+SessionTransaction --> Access
+SessionTransaction --> DBConnection
+
 @enduml

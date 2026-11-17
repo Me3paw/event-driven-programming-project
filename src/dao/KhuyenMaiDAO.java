@@ -120,17 +120,7 @@ public class KhuyenMaiDAO {
     return out;
   }
   public String nextId(Connection c) throws SQLException {
-    try (PreparedStatement s = c.prepareStatement("SELECT MAX(ma_khuyen_mai) FROM KHUYEN_MAI")) {
-      try (ResultSet r = s.executeQuery()) {
-        int next = 1;
-        if (r.next()) {
-          String max = r.getString(1);
-          if (max != null && max.matches("KM[0-9]{3}"))
-            next = Integer.parseInt(max.substring(2)) + 1;
-        }
-        return String.format("KM%03d", next);
-      }
-    }
+    return IdDAO.next("KM", c);
   }
   public void updateStatus(String maKhuyenMai, String trangThai, Connection c) throws SQLException {
     try (PreparedStatement s =

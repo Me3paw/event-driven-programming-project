@@ -36,27 +36,27 @@ public class MasterDataService {
   private final NhaCungCapDAO nhaCungCapDAO = new NhaCungCapDAO();
   public void luuNhanVien(Actor a, NhanVien v) throws SQLException {
     Access.manager(a);
-    luuNhanVien(v);
+    luuNhanVienInternal(a, v);
   }
   public void luuTaiKhoan(Actor a, TaiKhoan v, char[] p) throws SQLException {
     Access.manager(a);
-    luuTaiKhoan(v, p);
+    luuTaiKhoanInternal(a, v, p);
   }
   public void luuLoai(Actor a, LoaiSanPham v) throws SQLException {
     Access.manager(a);
-    luuLoai(v);
+    luuLoaiInternal(a, v);
   }
   public void luuSanPham(Actor a, SanPham v) throws SQLException {
     Access.manager(a);
-    luuSanPham(v);
+    luuSanPhamInternal(a, v);
   }
   public void luuKhachHang(Actor a, KhachHang v) throws SQLException {
     Access.actor(a);
-    luuKhachHang(v);
+    luuKhachHangInternal(a, v);
   }
   public void luuNhaCungCap(Actor a, NhaCungCap v) throws SQLException {
     Access.manager(a);
-    luuNhaCungCap(v);
+    luuNhaCungCapInternal(a, v);
   }
   public String maNhanVienTiepTheo(Actor a) throws SQLException {
     Access.manager(a);
@@ -152,37 +152,37 @@ public class MasterDataService {
   }
   public void xoaNhanVien(Actor a, String id) throws SQLException {
     Access.manager(a);
-    throw new IllegalStateException("Không xóa nhân viên; hãy đổi trạng thái nhân viên");
+    xoaNhanVienInternal(a, id);
   }
   public void xoaTaiKhoan(Actor a, String id) throws SQLException {
     Access.manager(a);
-    throw new IllegalStateException("Không xóa tài khoản; hãy đổi trạng thái tài khoản");
+    xoaTaiKhoanInternal(a, id);
   }
   public void xoaLoai(Actor a, String id) throws SQLException {
     Access.manager(a);
-    xoaLoai(id);
+    xoaLoaiInternal(a, id);
   }
   public void xoaSanPham(Actor a, String id) throws SQLException {
     Access.manager(a);
-    xoaSanPham(id);
+    xoaSanPhamInternal(a, id);
   }
   public void xoaKhachHang(Actor a, String id) throws SQLException {
     Access.actor(a);
-    throw new IllegalStateException("Không xóa khách hàng; hãy đổi trạng thái khách hàng");
+    xoaKhachHangInternal(a, id);
   }
   public void xoaNhaCungCap(Actor a, String id) throws SQLException {
     Access.manager(a);
-    throw new IllegalStateException("Không xóa nhà cung cấp; hãy đổi trạng thái nhà cung cấp");
+    xoaNhaCungCapInternal(a, id);
   }
   public void capNhatTrangThaiNhanVien(Actor a, String id, String s) throws SQLException {
     Access.manager(a);
-    capNhatTrangThaiNhanVien(id, s);
+    capNhatTrangThaiNhanVienInternal(a, id, s);
   }
   public void capNhatTrangThaiTaiKhoan(Actor a, String id, String s) throws SQLException {
     Access.manager(a);
-    capNhatTrangThaiTaiKhoan(id, s);
+    capNhatTrangThaiTaiKhoanInternal(a, id, s);
   }
-  private void luuNhanVien(NhanVien v) throws SQLException {
+  private void luuNhanVienInternal(Actor a, NhanVien v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu nhân viên");
     v.setMaNhanVien(code(v.getMaNhanVien(), "Mã nhân viên", ValidationRules.EMPLOYEE_ID, "NV001"));
@@ -190,11 +190,15 @@ public class MasterDataService {
     v.setSoDienThoai(vnPhone(v.getSoDienThoai(), "Số điện thoại nhân viên"));
     v.setChucVu(optional(v.getChucVu(), "Chức vụ", 30));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiNhanVien.class, "Trạng thái nhân viên"));
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, true)) {
+      Connection c = transaction.connection();
+      if (!"DANG_LAM".equals(v.getTrangThai())) protectEmployee(a, v.getMaNhanVien(), c);
+
       nhanVienDAO.save(v, c);
+      transaction.commit();
     }
   }
-  private void luuTaiKhoan(TaiKhoan v, char[] password) throws SQLException {
+  private void luuTaiKhoanInternal(Actor a, TaiKhoan v, char[] password) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu tài khoản");
     String username = required(v.getTenDangNhap(), "Tên đăng nhập", 50);
@@ -205,7 +209,13 @@ public class MasterDataService {
     v.setMaNhanVien(code(v.getMaNhanVien(), "Mã nhân viên", ValidationRules.EMPLOYEE_ID, "NV001"));
     v.setVaiTro(enumValue(v.getVaiTro(), VaiTro.class, "Vai trò"));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiTaiKhoan.class, "Trạng thái tài khoản"));
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, true)) {
+      Connection c = transaction.connection();
+      TaiKhoan existing = taiKhoanDAO.find(v.getTenDangNhap(), c);
+      if (existing != null && (!"HOAT_DONG".equals(v.getTrangThai())
+          || !existing.getVaiTro().equals(v.getVaiTro())
+          || !existing.getMaNhanVien().equals(v.getMaNhanVien()))) protectAccount(a, v.getTenDangNhap(), c);
+
       TaiKhoan old = taiKhoanDAO.find(v.getTenDangNhap(), c);
       if (password == null || password.length == 0) {
         if (old == null)
@@ -217,50 +227,57 @@ public class MasterDataService {
         v.setMatKhauBam(new AuthService().hash(password));
       }
       taiKhoanDAO.save(v, c);
+      transaction.commit();
     } finally {
       if (password != null)
         Arrays.fill(password, '\0');
     }
   }
-  private void luuLoai(LoaiSanPham v) throws SQLException {
+  private void luuLoaiInternal(Actor a, LoaiSanPham v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu loại sản phẩm");
     v.setMaLoai(code(v.getMaLoai(), "Mã loại", ValidationRules.CATEGORY_ID, "LSP001"));
     v.setTenLoai(required(v.getTenLoai(), "Tên loại", 100));
     v.setMoTa(optional(v.getMoTa(), "Mô tả", 255));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiSanPham.class, "Trạng thái loại"));
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, false)) {
+      Connection c = transaction.connection();
       loaiDAO.save(v, c);
+      transaction.commit();
     }
   }
-  private void luuSanPham(SanPham v) throws SQLException {
+  private void luuSanPhamInternal(Actor a, SanPham v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu sản phẩm");
     v.setMaSanPham(code(v.getMaSanPham(), "Mã sản phẩm", ValidationRules.PRODUCT_ID, "893000000001"));
     v.setMaLoai(code(v.getMaLoai(), "Mã loại", ValidationRules.CATEGORY_ID, "LSP001"));
     v.setTenSanPham(required(v.getTenSanPham(), "Tên sản phẩm", 150));
     v.setDonViTinh(required(v.getDonViTinh(), "Đơn vị tính", 30));
-    if (v.getGiaBan() == null || v.getGiaBan().signum() <= 0)
-      throw new IllegalArgumentException("Giá bán phải lớn hơn 0");
+    if (v.getGiaBan() == null || v.getGiaBan().signum() < 0)
+      throw new IllegalArgumentException("Giá bán không được âm");
     if (v.getNguongTon() < 0)
       throw new IllegalArgumentException("Ngưỡng tồn không được âm");
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiSanPham.class, "Trạng thái sản phẩm"));
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, false)) {
+      Connection c = transaction.connection();
       sanPhamDAO.save(v, c);
+      transaction.commit();
     }
   }
-  private void luuKhachHang(KhachHang v) throws SQLException {
+  private void luuKhachHangInternal(Actor a, KhachHang v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu khách hàng");
     v.setMaKhachHang(code(v.getMaKhachHang(), "Mã khách hàng", ValidationRules.CUSTOMER_ID, "KH001"));
     v.setHoTen(personName(v.getHoTen(), "Họ tên khách hàng"));
     v.setSoDienThoai(vnPhone(v.getSoDienThoai(), "Số điện thoại khách hàng"));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiHoatDong.class, "Trạng thái khách hàng"));
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(a, false, false)) {
+      Connection c = transaction.connection();
       khachHangDAO.save(v, c);
+      transaction.commit();
     }
   }
-  private void luuNhaCungCap(NhaCungCap v) throws SQLException {
+  private void luuNhaCungCapInternal(Actor a, NhaCungCap v) throws SQLException {
     if (v == null)
       throw new IllegalArgumentException("Thiếu nhà cung cấp");
     v.setMaNhaCungCap(code(v.getMaNhaCungCap(), "Mã nhà cung cấp", ValidationRules.SUPPLIER_ID, "NCC001"));
@@ -268,8 +285,10 @@ public class MasterDataService {
     v.setSoDienThoai(vnPhone(v.getSoDienThoai(), "Số điện thoại nhà cung cấp"));
     v.setDiaChi(optional(v.getDiaChi(), "Địa chỉ", 255));
     v.setTrangThai(enumValue(v.getTrangThai(), TrangThaiHoatDong.class, "Trạng thái nhà cung cấp"));
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, false)) {
+      Connection c = transaction.connection();
       nhaCungCapDAO.save(v, c);
+      transaction.commit();
     }
   }
   private List<NhanVien> timNhanVien(String keyword, String trangThai, String chucVu)
@@ -305,50 +324,117 @@ public class MasterDataService {
       return nhaCungCapDAO.search(keyword, trangThai, c);
     }
   }
-  private void xoaNhanVien(String id) throws SQLException {
-    try (Connection c = DBConnection.open()) {
+  private void xoaNhanVienInternal(Actor a, String id) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, true)) {
+      Connection c = transaction.connection();
+      protectEmployee(a, id, c);
+
       nhanVienDAO.delete(id, c);
+      transaction.commit();
+    } catch (SQLException exception) {
+      if (exception.getErrorCode() == 547)
+        throw new IllegalStateException("Bản ghi đã được tham chiếu; hãy đổi trạng thái thay vì xóa.", exception);
+      throw exception;
     }
   }
-  private void xoaTaiKhoan(String id) throws SQLException {
-    try (Connection c = DBConnection.open()) {
+  private void xoaTaiKhoanInternal(Actor a, String id) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, true)) {
+      Connection c = transaction.connection();
+      protectAccount(a, id, c);
+
       taiKhoanDAO.delete(id, c);
+      transaction.commit();
+    } catch (SQLException exception) {
+      if (exception.getErrorCode() == 547)
+        throw new IllegalStateException("Bản ghi đã được tham chiếu; hãy đổi trạng thái thay vì xóa.", exception);
+      throw exception;
     }
   }
-  private void xoaLoai(String id) throws SQLException {
-    try (Connection c = DBConnection.open()) {
+  private void xoaLoaiInternal(Actor a, String id) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, false)) {
+      Connection c = transaction.connection();
       loaiDAO.delete(id, c);
+      transaction.commit();
+    } catch (SQLException exception) {
+      if (exception.getErrorCode() == 547)
+        throw new IllegalStateException("Bản ghi đã được tham chiếu; hãy đổi trạng thái thay vì xóa.", exception);
+      throw exception;
     }
   }
-  private void xoaSanPham(String id) throws SQLException {
-    try (Connection c = DBConnection.open()) {
+  private void xoaSanPhamInternal(Actor a, String id) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, false)) {
+      Connection c = transaction.connection();
       sanPhamDAO.delete(id, c);
+      transaction.commit();
+    } catch (SQLException exception) {
+      if (exception.getErrorCode() == 547)
+        throw new IllegalStateException("Bản ghi đã được tham chiếu; hãy đổi trạng thái thay vì xóa.", exception);
+      throw exception;
     }
   }
-  private void xoaKhachHang(String id) throws SQLException {
-    try (Connection c = DBConnection.open()) {
+  private void xoaKhachHangInternal(Actor a, String id) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(a, false, false)) {
+      Connection c = transaction.connection();
       khachHangDAO.delete(id, c);
+      transaction.commit();
+    } catch (SQLException exception) {
+      if (exception.getErrorCode() == 547)
+        throw new IllegalStateException("Bản ghi đã được tham chiếu; hãy đổi trạng thái thay vì xóa.", exception);
+      throw exception;
     }
   }
-  private void xoaNhaCungCap(String id) throws SQLException {
-    try (Connection c = DBConnection.open()) {
+  private void xoaNhaCungCapInternal(Actor a, String id) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, false)) {
+      Connection c = transaction.connection();
       nhaCungCapDAO.delete(id, c);
+      transaction.commit();
+    } catch (SQLException exception) {
+      if (exception.getErrorCode() == 547)
+        throw new IllegalStateException("Bản ghi đã được tham chiếu; hãy đổi trạng thái thay vì xóa.", exception);
+      throw exception;
     }
   }
-  private void capNhatTrangThaiNhanVien(String maNhanVien, String trangThai) throws SQLException {
+  private void capNhatTrangThaiNhanVienInternal(Actor a, String maNhanVien, String trangThai) throws SQLException {
     if (!Access.is(trangThai, TrangThaiNhanVien.class))
       throw new IllegalArgumentException("Trạng thái nhân viên không hợp lệ");
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, true)) {
+      Connection c = transaction.connection();
+      if (!"DANG_LAM".equals(trangThai)) protectEmployee(a, maNhanVien, c);
+
       nhanVienDAO.updateStatus(maNhanVien, trangThai, c);
+      transaction.commit();
     }
   }
-  private void capNhatTrangThaiTaiKhoan(String tenDangNhap, String trangThai) throws SQLException {
+  private void capNhatTrangThaiTaiKhoanInternal(Actor a, String tenDangNhap, String trangThai) throws SQLException {
     if (!Access.is(trangThai, TrangThaiTaiKhoan.class))
       throw new IllegalArgumentException("Trạng thái tài khoản không hợp lệ");
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(a, true, true)) {
+      Connection c = transaction.connection();
+      if (!"HOAT_DONG".equals(trangThai)) protectAccount(a, tenDangNhap, c);
+
       taiKhoanDAO.updateStatus(tenDangNhap, trangThai, c);
+      transaction.commit();
     }
   }
+  private void protectAccount(Actor actor, String username, Connection connection) throws SQLException {
+    if (actor.getTenDangNhap().equals(username))
+      throw new IllegalStateException("Không thể xóa, khóa hoặc hạ quyền tài khoản đang đăng nhập");
+    TaiKhoan account = taiKhoanDAO.find(username, connection);
+    if (account != null && "QUAN_LY".equals(account.getVaiTro())
+        && "HOAT_DONG".equals(account.getTrangThai())
+        && "DANG_LAM".equals(account.getTrangThaiNhanVien())) {
+      if (taiKhoanDAO.countActiveManagers(connection) <= 1)
+        throw new IllegalStateException("Phải giữ ít nhất một quản lý đang hoạt động");
+    }
+  }
+
+  private void protectEmployee(Actor actor, String employeeId, Connection connection) throws SQLException {
+    if (actor.getMaNhanVien().equals(employeeId))
+      throw new IllegalStateException("Không thể xóa hoặc cho nghỉ việc nhân viên đang đăng nhập");
+    for (TaiKhoan account : taiKhoanDAO.search(employeeId, null, null, connection))
+      if (employeeId.equals(account.getMaNhanVien())) protectAccount(actor, account.getTenDangNhap(), connection);
+  }
+
   private String tier(long points) {
     return points >= 1000000 ? HangThanhVien.VANG.name()
         : points >= 200000   ? HangThanhVien.BAC.name()

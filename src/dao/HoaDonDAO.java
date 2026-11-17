@@ -15,13 +15,13 @@ import java.util.List;
 import service.ThongKeCa;
 
 public class HoaDonDAO {
-  public void save(HoaDon h, Connection c) throws SQLException {
+  public void save(HoaDon h, Connection c, String actor, String fingerprint) throws SQLException {
     String q = "INSERT INTO HOA_DON "
         + "(ma_hoa_don,ma_nhan_vien,ma_khach_hang,ma_khuyen_mai,ma_nhan_vien_huy,thoi_diem_"
         + "lap,thoi_diem_huy,phuong_thuc_tt,ma_tham_chieu_tt,tong_gia_goc,loai_giam_gia,ty_"
         + "le_giam,tien_giam,diem_su_dung,tien_giam_diem,diem_tich_luy_kiem,diem_thuong_"
         + "kiem,ty_le_vat,tien_vat,tong_thanh_toan,tien_khach_dua,tien_thua,trang_thai,ly_"
-        + "do_huy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        + "do_huy,checkout_actor,checkout_fingerprint) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
     try (PreparedStatement s = c.prepareStatement(q)) {
       int i = 1;
       s.setString(i++, h.getMaHoaDon());
@@ -51,6 +51,8 @@ public class HoaDonDAO {
       s.setBigDecimal(i++, h.getTienThua());
       s.setString(i++, h.getTrangThai());
       s.setString(i++, h.getLyDoHuy());
+      s.setString(i++, actor);
+      s.setString(i++, fingerprint);
       s.executeUpdate();
     }
     try (PreparedStatement s = c.prepareStatement("INSERT INTO CHI_TIET_HOA_DON "
@@ -81,6 +83,20 @@ public class HoaDonDAO {
       s.executeBatch();
     }
   }
+  public HoaDon repeatedCheckout(String id, String actor, String fingerprint, Connection connection)
+      throws SQLException {
+    try (PreparedStatement statement = connection.prepareStatement(
+        "SELECT checkout_actor,checkout_fingerprint FROM HOA_DON WHERE ma_hoa_don=?")) {
+      statement.setString(1, id);
+      try (ResultSet result = statement.executeQuery()) {
+        if (!result.next()) return null;
+        if (!actor.equals(result.getString(1)) || !fingerprint.equals(result.getString(2)))
+          throw new IllegalArgumentException("Mã thanh toán đã được dùng với tài khoản hoặc nội dung khác");
+      }
+    }
+    return detail(id, connection);
+  }
+
   public HoaDon lock(String maHoaDon, Connection c) throws SQLException {
     try (PreparedStatement s =
              c.prepareStatement("SELECT * FROM HOA_DON WITH (UPDLOCK, ROWLOCK) WHERE ma_hoa_don=?")) {

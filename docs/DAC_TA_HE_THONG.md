@@ -1,12 +1,12 @@
 # Đặc tả hệ thống quản lý bán hàng tại cửa hàng tiện lợi
 
-Tài liệu này là Phần 1, 2 và 3 của bài tập lớn LTHSK Java năm học 2025–2026. Phần mềm phục vụ nhân viên của một cửa hàng tiện lợi; không có ứng dụng, tài khoản hay đơn đặt hàng cho người mua. Cơ sở dữ liệu là MariaDB theo chấp thuận của giảng viên, thay cho SQL Server nêu trong đề bài.
+Tài liệu này là Phần 1, 2 và 3 của bài tập lớn LTHSK Java năm học 2025–2026. Phần mềm phục vụ nhân viên của một cửa hàng tiện lợi; không có ứng dụng, tài khoản hay đơn đặt hàng cho người mua. Cơ sở dữ liệu chính thức là Microsoft SQL Server, chạy được trên Windows hoặc Docker Linux.
 
 ## 1. Thu thập và phân tích yêu cầu
 
 ### 1.1. Mục tiêu và phạm vi
 
-Hệ thống desktop hỗ trợ cửa hàng bán tại quầy: quản lý danh mục và nhân sự, nhập hàng, quản lý tồn theo lô, bán hàng, in hóa đơn, khuyến mãi, khách hàng thân thiết và báo cáo cơ bản. Hệ thống chỉ có một cửa hàng, dùng VND và hoạt động nội bộ trên Java 8 Swing.
+Hệ thống desktop hỗ trợ cửa hàng bán tại quầy: quản lý danh mục và nhân sự, nhập hàng, quản lý tồn theo lô, bán hàng, in hóa đơn, khuyến mãi, khách hàng thân thiết và báo cáo cơ bản. Hệ thống chỉ có một cửa hàng, dùng VND và hoạt động nội bộ trên Java 17 Swing.
 
 Ngoài phạm vi: bán trực tuyến, nhiều chi nhánh, trả hàng một phần, trả nhà cung cấp, tích hợp cổng thanh toán thật, chiến dịch CRM/gửi tin, hạn sử dụng theo lô và hủy phiếu nhập đã hoàn tất.
 
@@ -23,16 +23,17 @@ Nhân viên không có quyền không nhìn thấy chức năng tương ứng; s
 
 #### Đăng nhập, nhân sự và danh mục
 
-- Đăng nhập bằng tên đăng nhập và mật khẩu. Tài khoản hoặc nhân viên ngừng hoạt động không được đăng nhập.
+- Đăng nhập bằng tên đăng nhập và mật khẩu. Tài khoản hoặc nhân viên ngừng hoạt động không được đăng nhập. Khóa tài khoản, cho nhân viên nghỉ việc hoặc đổi vai trò làm phiên hiện tại hết hiệu lực ở thao tác được bảo vệ kế tiếp; mở khóa/cấp quyền lại vẫn cần đăng nhập mới. Giỏ chưa thanh toán được giữ riêng theo tài khoản trong phiên chạy ứng dụng.
 - Quản lý nhân viên, tài khoản, loại sản phẩm, sản phẩm, khách hàng và nhà cung cấp: thêm, sửa, xóa, liệt kê, xem chi tiết, tìm kiếm đơn giản và nâng cao.
 - Tìm kiếm đơn giản theo từ khóa; tìm kiếm nâng cao theo các điều kiện phù hợp, ví dụ trạng thái, loại, khoảng giá, khoảng tồn, hạng khách hàng hoặc khoảng ngày.
-- Bản ghi chưa được tham chiếu có thể xóa. Bản ghi đã phát sinh chứng từ chỉ được chuyển ngừng hoạt động, không được xóa vật lý.
+- Bản ghi chưa được tham chiếu có thể xóa sau xác nhận. Mọi khóa ngoại, kể cả tài khoản gắn nhân viên và danh mục gắn sản phẩm, phải được tôn trọng. Bản ghi đã phát sinh chứng từ chỉ được chuyển ngừng hoạt động, không được xóa vật lý. Không xóa/khóa/hạ quyền tài khoản đang đăng nhập hoặc làm mất quản lý đang hoạt động cuối cùng.
 - Sản phẩm ngừng kinh doanh không được thêm vào hóa đơn mới. Nhân viên nghỉ việc/khóa tài khoản không được đăng nhập nhưng lịch sử chứng từ được giữ nguyên.
 
 #### Nhập hàng và tồn kho
 
 - Quản lý lập phiếu nhập từ một nhà cung cấp, thêm/sửa/xóa dòng hàng khi phiếu ở trạng thái `NHAP`.
 - Hoàn tất phiếu nhập chuyển trạng thái thành `HOAN_TAT`, tạo các lô tồn kho và khóa nội dung phiếu. Không hỗ trợ hủy phiếu nhập đã hoàn tất.
+- Giá bán và đơn giá nhập được bằng 0, không được âm; số lượng vẫn phải lớn hơn 0.
 - Tồn hiện tại của một sản phẩm là tổng `so_luong_con` của các lô tồn kho; không lưu trùng số lượng tồn trong `SAN_PHAM`.
 - Quản lý có thể điều chỉnh giảm tồn; bắt buộc ghi lý do. Số lượng giảm được lấy theo FIFO, từ lô cũ nhất còn hàng. Không có điều chỉnh tăng trong phạm vi này.
 
@@ -41,8 +42,10 @@ Nhân viên không có quyền không nhìn thấy chức năng tương ứng; s
 - Thu ngân tạo hóa đơn tại quầy, có thể chọn khách hàng hoặc bán cho khách lẻ.
 - Tìm sản phẩm theo mã/tên, thêm vào giỏ, đổi số lượng hoặc bỏ dòng trước thanh toán. Hệ thống kiểm tra sản phẩm đang kinh doanh và đủ tồn.
 - Phương thức thanh toán: tiền mặt, thẻ hoặc QR. Với tiền mặt, `tien_khach_dua` phải lớn hơn hoặc bằng `tong_thanh_toan` và tiền thừa bằng hiệu số. Với thẻ/QR, tiền khách đưa và tiền thừa để trống, phải lưu mã tham chiếu mô phỏng thành công. Thẻ/QR là mô phỏng thành công/thất bại tại máy, không gọi dịch vụ ngoài; mô phỏng thất bại không tạo hóa đơn, không trừ tồn, không đổi điểm.
+- Mỗi lần thanh toán dùng một mã `HD` và đúng 13 chữ số, được cấp bởi sequence SQL Server. Khi gửi lại cùng mã, cùng tài khoản và cùng nội dung yêu cầu, hệ thống trả hóa đơn cũ, không trừ tồn/điểm lần nữa. Mã trùng với nội dung khác bị từ chối. Khi mất phản hồi commit, giữ nguyên giỏ/mã và kiểm tra lại kết quả trước khi cho phép thanh toán mới. Báo giá không cấp mã hóa đơn.
 - Hóa đơn thanh toán thành công là bất biến: không sửa/xóa trực tiếp hóa đơn hay chi tiết. Có thể xem danh sách, chi tiết và tìm theo mã, nhân viên, khách hàng, trạng thái, phương thức hoặc khoảng ngày.
-- In/xem trước hóa đơn bằng API in có sẵn của Java; hóa đơn có thông tin cửa hàng, mã, thời gian, nhân viên, khách hàng nếu có, dòng hàng, giảm giá, VAT, tổng phải trả, phương thức thanh toán và tiền thừa nếu là tiền mặt.
+- Nhận được kết quả commit thì giỏ đã hoàn tất ngay; lỗi tải thông tin cửa hàng, xem trước, PDF hoặc máy in phải thông báo thanh toán thành công và cho thử lại hóa đơn, không phục hồi giỏ có thể thanh toán lần nữa.
+- In/xem trước hóa đơn bằng API in có sẵn của Java; hóa đơn có thông tin cửa hàng, mã, thời gian, nhân viên, khách hàng nếu có, dòng hàng, giảm giá, VAT, tổng phải trả, phương thức thanh toán và tiền thừa nếu là tiền mặt. “Điểm tích lũy lần này” và “Điểm thưởng nhận được” là hai dòng riêng đúng giá trị đã lưu; khách lẻ không được ghi như đã nhận điểm. In Java phân trang theo vùng in; xuất PDF là thao tác riêng.
 - Chỉ quản lý được hủy hóa đơn. Hủy cần lý do và xác thực lại quản lý ngay trên máy; một hóa đơn không được hủy hai lần. Hủy hoàn lại chính xác các lô đã xuất, hoàn điểm thưởng đã dùng, nhưng giữ điểm tích lũy và điểm thưởng đã kiếm từ hóa đơn đó.
 
 #### Khách hàng, khuyến mãi và cấu hình
@@ -51,12 +54,12 @@ Nhân viên không có quyền không nhìn thấy chức năng tương ứng; s
 - Điểm tích lũy dùng để xếp hạng: dưới 50.000 là chưa xếp hạng; Đồng từ 50.000, Bạc từ 200.000, Vàng từ 1.000.000 điểm. Mỗi hóa đơn thành công kiếm đúng số điểm tích lũy bằng tổng giá gốc VND (`1 điểm tích lũy = 1đ`); điểm này chỉ dùng xếp hạng, không đổi thưởng.
 - Với hóa đơn có khách hàng, hạng trước giao dịch được dùng cho giảm giá: Đồng 3%, Bạc 5%, Vàng 10%; chưa xếp hạng 0%.
 - Điểm thưởng khả dụng là số điểm có thể đổi thưởng. Mỗi hóa đơn thành công kiếm `floor(5% × tổng giá gốc)` điểm thưởng; `1 điểm thưởng = 1đ` giảm giá. Hóa đơn không gắn khách hàng không kiếm/dùng hai loại điểm.
-- Quản lý tạo khuyến mãi theo phần trăm, có thời gian hiệu lực và phạm vi toàn đơn hoặc danh sách sản phẩm. Tại một hóa đơn chỉ chọn một loại giảm giá: giảm theo hạng hoặc một sự kiện khuyến mãi; không cộng dồn hai loại. Điểm thưởng có thể dùng cùng lựa chọn đó.
+- Quản lý tạo khuyến mãi theo phần trăm, có thời gian hiệu lực và phạm vi toàn đơn hoặc danh sách sản phẩm. Khuyến mãi toàn đơn bắt buộc có giá trị đơn tối thiểu lớn hơn 0 (có thể đặt 10đ); ngưỡng xét trên tổng giá gốc trước giảm giá/điểm/VAT, đạt đúng ngưỡng cũng hợp lệ. Tên bắt đầu bằng “Khuyến mãi”, được chứa dấu `%` và không quá 150 ký tự. Tại một hóa đơn chỉ chọn một loại giảm giá: giảm theo hạng hoặc một sự kiện khuyến mãi; không cộng dồn hai loại. Điểm thưởng có thể dùng cùng lựa chọn đó.
 - VAT mặc định 10%, nằm trong khoảng 0–100%. Quản lý có thể đổi VAT áp dụng cho giao dịch tương lai; mức VAT, tỷ lệ/mức giảm và các giá trị tính tại thời điểm bán phải được lưu trong hóa đơn.
 
 #### Báo cáo
 
-- Quản lý xem theo khoảng ngày: doanh thu, tiền nhập, giá vốn FIFO, lợi nhuận gộp, số hóa đơn, hàng bán chạy, sản phẩm tồn thấp và khách hàng theo hạng.
+- Quản lý xem theo khoảng ngày: doanh thu, tiền nhập, giá vốn FIFO, lợi nhuận gộp, số hóa đơn, hàng bán chạy, sản phẩm tồn thấp và khách hàng theo hạng. Hàng đã bán vẫn xuất hiện trong thống kê lịch sử sau khi ngừng kinh doanh; chỉ chứng từ đã hủy bị loại.
 - Màn hình báo cáo dùng KPI, bảng và biểu đồ Java2D cơ bản; không thêm thư viện biểu đồ.
 
 ### 1.4. Luồng nghiệp vụ chính
@@ -80,7 +83,7 @@ Nhân viên không có quyền không nhìn thấy chức năng tương ứng; s
 1. Thu ngân tạo giỏ hàng, chọn khách hàng tùy chọn, thêm sản phẩm và số lượng.
 2. Hệ thống tính tổng giá gốc, giảm giá, điểm thưởng, VAT và tổng phải trả theo thứ tự ở mục 1.5.
 3. Thu ngân chọn phương thức thanh toán. Tiền mặt phải đủ tiền nhận; thẻ/QR phải có kết quả mô phỏng thành công và mã tham chiếu trước khi lưu.
-4. Trong một transaction, nếu có khách hàng hệ thống khóa hàng `KHACH_HANG` bằng `SELECT ... FOR UPDATE`, kiểm tra lại số điểm thưởng khả dụng, rồi khóa các lô cần xuất bằng `SELECT ... FOR UPDATE`, kiểm tra tồn lại, lưu hóa đơn/chi tiết/phân bổ lô, trừ lô và cập nhật hai loại điểm.
+4. Trong một transaction, nếu có khách hàng hệ thống khóa hàng `KHACH_HANG` bằng `SELECT ... WITH (UPDLOCK, ROWLOCK)`, kiểm tra lại số điểm thưởng khả dụng, rồi khóa các lô cần xuất bằng `SELECT ... WITH (UPDLOCK, ROWLOCK)`, kiểm tra tồn lại, lưu hóa đơn/chi tiết/phân bổ lô, trừ lô và cập nhật hai loại điểm.
 5. Nếu bất kỳ bước nào lỗi, rollback toàn bộ; nếu thành công, in hoặc xem trước hóa đơn.
 
 #### UC04 — Hủy hóa đơn
@@ -96,7 +99,7 @@ Nhân viên không có quyền không nhìn thấy chức năng tương ứng; s
 |---|---|
 | BR01 | Tiền dùng VND: Java dùng `BigDecimal`, CSDL dùng `DECIMAL(15,0)`; không dùng `double`. Tỷ lệ dùng `DECIMAL(5,2)`, điểm dùng `BIGINT`. |
 | BR02 | Tổng giá gốc là tổng số lượng nhân đơn giá bán đã chốt trên từng dòng. |
-| BR03 | Thứ tự tính: tổng giá gốc → một giảm giá theo hạng hoặc sự kiện → trừ điểm thưởng → tính VAT trên phần còn lại. Phép nhân tỷ lệ làm tròn `HALF_UP` đến VND; điểm thưởng cộng làm tròn xuống. |
+| BR03 | Thứ tự tính: tổng giá gốc → một giảm giá theo hạng hoặc sự kiện → trừ điểm thưởng → tính VAT trên phần còn lại. Phép nhân tỷ lệ chỉ làm tròn một lần `HALF_UP` đến VND; điểm thưởng cộng làm tròn xuống. |
 | BR04 | Hạng áp dụng dựa trên điểm tích lũy trước giao dịch. Hóa đơn thành công kiếm điểm tích lũy bằng tổng giá gốc VND, chỉ dùng xếp hạng; đồng thời kiếm `floor(5% × tổng giá gốc)` điểm thưởng khả dụng. Một điểm thưởng đổi 1 VND. |
 | BR05 | Chỉ dùng một trong hai loại giảm giá hạng/sự kiện. Khuyến mãi có tỷ lệ lớn hơn 0% và không quá 100%, chỉ hiệu lực trong khoảng thời gian đã cấu hình và đúng phạm vi; phạm vi sản phẩm chỉ giảm trên tổng giá gốc của các dòng sản phẩm thuộc sự kiện. |
 | BR06 | Điểm thưởng dùng không vượt quá cả phần tiền sau giảm giá và số điểm thưởng khả dụng của khách hàng trước giao dịch; phần chịu VAT không âm. VAT và tỷ lệ giảm giá được lưu theo hóa đơn, VAT nằm trong 0–100%. |
@@ -108,7 +111,7 @@ Nhân viên không có quyền không nhìn thấy chức năng tương ứng; s
 
 ### 1.6. Yêu cầu phi chức năng
 
-- Java 8 Swing, JDBC và MariaDB; mô hình ba lớp `graphicUI → service → dao`.
+- Java 17 Swing, JDBC và Microsoft SQL Server; mô hình ba lớp `graphicUI → service → dao`.
 - Mọi dữ liệu do người dùng nhập vào câu SQL phải dùng `PreparedStatement`.
 - Giao diện tiếng Việt, thao tác rõ ràng, xác nhận trước xóa/hủy, hỗ trợ Tab, Enter, Esc, `F2` tạo hóa đơn, `Ctrl+S` lưu và `Ctrl+F` tìm.
 - Dùng `CardLayout`; truy vấn có thể chờ dùng `SwingWorker` để không treo giao diện.
@@ -154,9 +157,9 @@ Không tạo interface chỉ có một implementation, factory hoặc lớp `Bas
 
 ### 2.3. Giao dịch và luồng phụ thuộc
 
-`SaleService` mở transaction; nếu hóa đơn có khách hàng, khóa hàng khách bằng `SELECT ... FOR UPDATE` trước khi kiểm tra/trừ điểm thưởng khả dụng; sau đó khóa lô, kiểm tra lại số lượng, ghi hóa đơn/chi tiết/phân bổ, trừ lô và cập nhật hai loại điểm rồi mới commit. `PurchaseService` và `InventoryService` xử lý hoàn tất nhập/điều chỉnh theo cùng nguyên tắc. Khi có lỗi, service rollback và giao diện chỉ nhận thông báo lỗi nghiệp vụ.
+`SaleService` mở transaction; nếu hóa đơn có khách hàng, khóa hàng khách bằng `SELECT ... WITH (UPDLOCK, ROWLOCK)` trước khi kiểm tra/trừ điểm thưởng khả dụng; sau đó khóa lô, kiểm tra lại số lượng, ghi hóa đơn/chi tiết/phân bổ, trừ lô và cập nhật hai loại điểm rồi mới commit. `PurchaseService` và `InventoryService` xử lý hoàn tất nhập/điều chỉnh theo cùng nguyên tắc. Khi có lỗi trước commit, service rollback và giao diện giữ giỏ để sửa. Khi mất phản hồi commit, dùng lại mã thanh toán để xác định kết quả; không coi lỗi sau commit là giao dịch chưa thanh toán. Mỗi transaction thay đổi dữ liệu giữ khóa ứng dụng `POS_AUTHORIZATION` dạng Shared và kiểm tra tài khoản/nhân viên/vai trò trên cùng connection; cập nhật phân quyền dùng khóa Exclusive. Transaction lấy khóa trước sẽ hoàn tất trước; sau khi thay đổi quyền commit, thao tác kế tiếp của phiên cũ bị từ chối.
 
-## 3. Thiết kế cơ sở dữ liệu MariaDB và ràng buộc
+## 3. Thiết kế cơ sở dữ liệu Microsoft SQL Server và ràng buộc
 
 ERD PlantUML được lưu cùng tài liệu trong `docs/`. Lược đồ có đúng 17 bảng, không tạo bảng dự phòng.
 
@@ -197,6 +200,7 @@ ERD PlantUML được lưu cùng tài liệu trong `docs/`. Lược đồ có đ
 - Chi tiết phiếu nhập, chi tiết hóa đơn, phân bổ lô và chi tiết điều chỉnh không được sửa/xóa trực tiếp sau khi chứng từ hoàn tất/thanh toán.
 - `LO_TON_KHO.so_luong_con` chỉ được thay đổi trong transaction hoàn tất nhập, bán, hủy hóa đơn hoặc điều chỉnh giảm; luôn không âm.
 - Tổng giá vốn của hóa đơn lấy từ tổng `so_luong_xuat × don_gia_von` tại `PHAN_BO_XUAT_LO` theo FIFO. Báo cáo doanh thu/lợi nhuận chỉ tính `HOA_DON` trạng thái `DA_THANH_TOAN`.
+- Các mã tự cấp dùng sequence SQL Server, khởi tạo trên hậu tố số lớn nhất hiện có; không dùng `MAX` chuỗi. `NV`, `KH`, `KM` giữ đúng ba chữ số và báo rõ khi hết mã; `LSP`, `NCC`, `PN`, `DC` có hậu tố dài hơn trong giới hạn cột. Sequence có thể có khoảng trống khi hủy form hoặc rollback; không tái sử dụng mã đã cấp.
 - Mã nghiệp vụ, tên đăng nhập và điện thoại khách hàng (nếu có) là duy nhất; mọi số lượng bán/nhập/điều chỉnh phải lớn hơn 0.
 
 ### 3.4. Truy vết yêu cầu

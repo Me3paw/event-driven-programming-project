@@ -27,15 +27,15 @@ public class PromotionService {
   public void capNhatTrangThai(Actor actor, String maKhuyenMai, String trangThai)
       throws SQLException {
     Access.manager(actor);
-    capNhatTrangThai(maKhuyenMai, trangThai);
+    capNhatTrangThaiInternal(actor, maKhuyenMai, trangThai);
   }
   public void xoa(Actor actor, String maKhuyenMai) throws SQLException {
     Access.manager(actor);
-    xoa(maKhuyenMai);
+    xoaInternal(actor, maKhuyenMai);
   }
   public void luu(Actor actor, KhuyenMai value) throws SQLException {
     Access.manager(actor);
-    luu(value);
+    luuInternal(actor, value);
   }
   public String maKhuyenMaiTiepTheo(Actor actor) throws SQLException {
     Access.manager(actor);
@@ -43,7 +43,7 @@ public class PromotionService {
       return dao.nextId(c);
     }
   }
-  private void luu(KhuyenMai value) throws SQLException {
+  private void luuInternal(Actor actor, KhuyenMai value) throws SQLException {
     if (value == null || value.getMaKhuyenMai() == null
         || !ValidationRules.matches(value.getMaKhuyenMai(), ValidationRules.PROMOTION_ID)
         || value.getMaKhuyenMai().trim().length() > 20)
@@ -84,7 +84,8 @@ public class PromotionService {
         if (id != null && !id.trim().isEmpty())
           normalizedProducts.add(id.trim());
     value.setMaSanPham(normalizedProducts);
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(actor, true, false)) {
+      Connection c = transaction.connection();
       if (value.getMaSanPham() != null)
         for (String id : value.getMaSanPham()) {
           String productId = id == null ? null : id.trim();
@@ -92,15 +93,12 @@ public class PromotionService {
           if (product == null || !TrangThaiSanPham.DANG_KINH_DOANH.name().equals(product.getTrangThai()))
             throw new IllegalArgumentException("Sản phẩm khuyến mãi không tồn tại hoặc đã ngừng kinh doanh: " + id);
         }
-      c.setAutoCommit(false);
       try {
         dao.save(value, c);
-        c.commit();
+        transaction.commit();
       } catch (RuntimeException | SQLException e) {
         c.rollback();
         throw e;
-      } finally {
-        c.setAutoCommit(true);
       }
     }
   }
@@ -109,26 +107,26 @@ public class PromotionService {
       return dao.search(keyword, trangThai, c);
     }
   }
-  private void capNhatTrangThai(String maKhuyenMai, String trangThai) throws SQLException {
+  private void capNhatTrangThaiInternal(Actor actor, String maKhuyenMai, String trangThai) throws SQLException {
     if (!Access.is(trangThai, TrangThaiKhuyenMai.class))
       throw new IllegalArgumentException("Trạng thái khuyến mãi không hợp lệ");
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(actor, true, false)) {
+      Connection c = transaction.connection();
       dao.updateStatus(maKhuyenMai, trangThai, c);
+      transaction.commit();
     }
   }
-  private void xoa(String maKhuyenMai) throws SQLException {
-    try (Connection c = DBConnection.open()) {
-      c.setAutoCommit(false);
+  private void xoaInternal(Actor actor, String maKhuyenMai) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(actor, true, false)) {
+      Connection c = transaction.connection();
       try {
         if (dao.referenced(maKhuyenMai, c))
           throw new IllegalStateException("Khuyến mãi đã được hóa đơn tham chiếu");
         dao.delete(maKhuyenMai, c);
-        c.commit();
+        transaction.commit();
       } catch (RuntimeException | SQLException e) {
         c.rollback();
         throw e;
-      } finally {
-        c.setAutoCommit(true);
       }
     }
   }

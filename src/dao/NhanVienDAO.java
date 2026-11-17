@@ -14,6 +14,7 @@ public class NhanVienDAO {
         + "(ma_nhan_vien,ho_ten,so_dien_thoai,chuc_vu,trang_thai) "
         + "ON target.ma_nhan_vien=source.ma_nhan_vien WHEN MATCHED THEN UPDATE SET "
         + "ho_ten=source.ho_ten,so_dien_thoai=source.so_dien_thoai,chuc_vu=source.chuc_vu,"
+        + "session_version=target.session_version+CASE WHEN target.trang_thai<>source.trang_thai THEN 1 ELSE 0 END, "
         + "trang_thai=source.trang_thai WHEN NOT MATCHED THEN INSERT "
         + "(ma_nhan_vien,ho_ten,so_dien_thoai,chuc_vu,trang_thai) VALUES "
         + "(source.ma_nhan_vien,source.ho_ten,source.so_dien_thoai,source.chuc_vu,source.trang_thai);";
@@ -61,18 +62,7 @@ public class NhanVienDAO {
   }
 
   public String nextId(Connection connection) throws SQLException {
-    try (PreparedStatement statement =
-             connection.prepareStatement("SELECT MAX(ma_nhan_vien) FROM NHAN_VIEN")) {
-      try (ResultSet result = statement.executeQuery()) {
-        int next = 1;
-        if (result.next()) {
-          String max = result.getString(1);
-          if (max != null && max.matches("NV[0-9]{3}"))
-            next = Integer.parseInt(max.substring(2)) + 1;
-        }
-        return String.format("NV%03d", next);
-      }
-    }
+    return IdDAO.next("NV", connection);
   }
 
   public void delete(String maNhanVien, Connection connection) throws SQLException {
@@ -86,7 +76,7 @@ public class NhanVienDAO {
   public void updateStatus(String maNhanVien, String trangThai, Connection connection)
       throws SQLException {
     try (PreparedStatement statement = connection.prepareStatement(
-             "UPDATE NHAN_VIEN SET trang_thai = ? WHERE ma_nhan_vien = ?")) {
+             "UPDATE NHAN_VIEN SET session_version=session_version+1,trang_thai = ? WHERE ma_nhan_vien = ?")) {
       statement.setString(1, trangThai);
       statement.setString(2, maNhanVien);
       if (statement.executeUpdate() != 1)

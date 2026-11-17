@@ -27,7 +27,7 @@ public class PurchaseService {
   public void luuNhap(Actor actor, PhieuNhap phieuNhap) throws SQLException {
     Access.manager(actor);
     phieuNhap.setMaNhanVien(actor.getMaNhanVien());
-    luuNhap(phieuNhap);
+    luuNhapInternal(actor, phieuNhap);
   }
   public String maPhieuNhapTiepTheo(Actor actor) throws SQLException {
     Access.manager(actor);
@@ -48,13 +48,15 @@ public class PurchaseService {
   }
   public void hoanTat(Actor actor, String maPhieuNhap) throws SQLException {
     Access.manager(actor);
-    hoanTat(maPhieuNhap);
+    hoanTatInternal(actor, maPhieuNhap);
   }
   public void xoaNhap(Actor actor, String maPhieuNhap) throws SQLException {
     Access.manager(actor);
     try (Connection c = DBConnection.open()) {
       c.setAutoCommit(false);
       try {
+        Access.lock(c, "POS_AUTHORIZATION", "Shared");
+        Access.validate(actor, true, c);
         phieuNhapDAO.deleteDraft(maPhieuNhap, c);
         c.commit();
       } catch (RuntimeException | SQLException e) {
@@ -74,23 +76,21 @@ public class PurchaseService {
     if (value == null || !TrangThaiPhieuNhap.NHAP.name().equals(value.getTrangThai()))
       throw new IllegalStateException("Chỉ sửa được phiếu nháp");
     value.setChiTiet(chiTiet);
-    luuNhap(actor, value);
+    luuNhapInternal(actor, value);
   }
-  private void luuNhap(PhieuNhap phieuNhap) throws SQLException {
-    try (Connection c = DBConnection.open()) {
-      c.setAutoCommit(false);
+  private void luuNhapInternal(Actor actor, PhieuNhap phieuNhap) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(actor, true, false)) {
+      Connection c = transaction.connection();
       try {
         validateDraft(phieuNhap, c);
         PhieuNhap old = phieuNhapDAO.lock(phieuNhap.getMaPhieuNhap(), c);
         if (old != null && !TrangThaiPhieuNhap.NHAP.name().equals(old.getTrangThai()))
           throw new IllegalStateException("Phiếu nhập đã hoàn tất");
         phieuNhapDAO.saveDraft(phieuNhap, c);
-        c.commit();
+        transaction.commit();
       } catch (RuntimeException | SQLException e) {
         c.rollback();
         throw e;
-      } finally {
-        c.setAutoCommit(true);
       }
     }
   }
@@ -104,9 +104,9 @@ public class PurchaseService {
       return phieuNhapDAO.load(maPhieuNhap, c);
     }
   }
-  private void hoanTat(String maPhieuNhap) throws SQLException {
-    try (Connection c = DBConnection.open()) {
-      c.setAutoCommit(false);
+  private void hoanTatInternal(Actor actor, String maPhieuNhap) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(actor, true, false)) {
+      Connection c = transaction.connection();
       try {
         PhieuNhap p = phieuNhapDAO.lock(maPhieuNhap, c);
         if (p == null || !TrangThaiPhieuNhap.NHAP.name().equals(p.getTrangThai())
@@ -117,12 +117,10 @@ public class PurchaseService {
         for (ChiTietPhieuNhap d : p.getChiTiet())
           loTonKhoDAO.create(p.getMaPhieuNhap(), d.getMaSanPham(), d.getSoLuong(), completedAt, c);
         phieuNhapDAO.complete(maPhieuNhap, completedAt, c);
-        c.commit();
+        transaction.commit();
       } catch (RuntimeException | SQLException e) {
         c.rollback();
         throw e;
-      } finally {
-        c.setAutoCommit(true);
       }
     }
   }
@@ -149,8 +147,8 @@ public class PurchaseService {
             throw new IllegalArgumentException("Sản phẩm không tồn tại hoặc đã ngừng kinh doanh: "
                 + detail.getMaSanPham());
           if (detail.getSoLuong() <= 0 || detail.getDonGiaNhap() == null
-              || detail.getDonGiaNhap().signum() <= 0)
-            throw new IllegalArgumentException("Số lượng và đơn giá nhập phải lớn hơn 0");
+              || detail.getDonGiaNhap().signum() < 0)
+            throw new IllegalArgumentException("Số lượng nhập phải lớn hơn 0 và đơn giá nhập không được âm");
         }
       }
 }

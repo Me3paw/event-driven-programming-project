@@ -3,23 +3,38 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 LOCAL="$ROOT/.dev"
-JDK="$LOCAL/jdk8"
+JDK="${POS_JAVA_HOME:-$LOCAL/jdk17}"
+if [[ -z "${POS_JAVA_HOME:-}" && -x /usr/lib/jvm/java-17-openjdk/bin/javac ]]; then
+    JDK=/usr/lib/jvm/java-17-openjdk
+fi
+if [[ ! -f "$ROOT/.env" ]]; then
+    (
+        umask 077
+        printf 'SQLSERVER_SA_PASSWORD=Sql17!%s\nPOS_DB_USER=cua_hang_app\nPOS_DB_PASSWORD=Pos17!%s\n' \
+            "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" \
+            "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" > "$ROOT/.env"
+    )
+fi
+if [[ -f "$ROOT/.env" ]]; then
+    set -a
+    source "$ROOT/.env"
+    set +a
+fi
+export POS_DB_URL="${POS_DB_URL:-jdbc:sqlserver://127.0.0.1:14330;databaseName=cua_hang_tien_loi;encrypt=true;trustServerCertificate=true}"
+export POS_DB_USER="${POS_DB_USER:-cua_hang_app}"
+SQLSERVER_JAR="$ROOT/lib/mssql-jdbc-13.2.0.jre11.jar"
 ECLIPSE="$LOCAL/eclipse"
 WORKSPACE="$LOCAL/workspace"
-JDK_ARCHIVE=OpenJDK8U-jdk_x64_linux_hotspot_8u504b01.tar.gz
-JDK_URL="https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u504-b01/$JDK_ARCHIVE"
-JDK_SHA256=9c70e102f527ac674ac2fe9c7d47b9a04e2d19842ba5ab8e9b33f368bbadfaea
 ECLIPSE_ARCHIVE=eclipse-java-2026-06-R-linux-gtk-x86_64.tar.gz
 ECLIPSE_URL="https://download.eclipse.org/technology/epp/downloads/release/2026-06/R/$ECLIPSE_ARCHIVE"
 ECLIPSE_SHA512=7e30aeaf1227068d00deabe45f397a9cb82a251f77c4df760e471f0811b9de4d5b5fcdfbe2ab750f0c9db68d3de763e32ae739ef4dc03617f7892f2accd3f344
 
 install_jdk() {
-    [[ -x "$JDK/bin/javac" ]] && return
-    mkdir -p "$LOCAL" "$JDK"
-    curl -fL --retry 3 -o "$LOCAL/$JDK_ARCHIVE" "$JDK_URL"
-    printf '%s  %s\n' "$JDK_SHA256" "$LOCAL/$JDK_ARCHIVE" | sha256sum -c -
-    tar -xzf "$LOCAL/$JDK_ARCHIVE" -C "$JDK" --strip-components=1
-    rm "$LOCAL/$JDK_ARCHIVE"
+    if [[ -x "$JDK/bin/javac" && "$("$JDK/bin/javac" -version 2>&1)" == javac\ 17.* ]]; then
+        return
+    fi
+    printf '%s\n' 'Java 17 required. Set POS_JAVA_HOME to an installed JDK 17.' >&2
+    exit 1
 }
 
 install_eclipse() {
@@ -37,7 +52,7 @@ configure_eclipse() {
     mkdir -p "$settings"
     printf '%s\n' \
         'eclipse.preferences.version=1' \
-        "org.eclipse.jdt.launching.PREF_VM_XML=<?xml version\\=\"1.0\" encoding\\=\"UTF-8\" standalone\\=\"no\"?>\\n<vmSettings defaultVM\\=\"57,${vm_type}9,temurin-8\" defaultVMConnector\\=\"\">\\n<vmType id\\=\"${vm_type}\">\\n<vm id\\=\"temurin-8\" name\\=\"Temurin 8\" path\\=\"${JDK}\"/>\\n</vmType>\\n</vmSettings>\\n" \
+        "org.eclipse.jdt.launching.PREF_VM_XML=<?xml version\\=\"1.0\" encoding\\=\"UTF-8\" standalone\\=\"no\"?>\\n<vmSettings defaultVM\\=\"57,${vm_type}9,jdk-17\" defaultVMConnector\\=\"\">\\n<vmType id\\=\"${vm_type}\">\\n<vm id\\=\"jdk-17\" name\\=\"JDK 17\" path\\=\"${JDK}\"/>\\n</vmType>\\n</vmSettings>\\n" \
         > "$settings/org.eclipse.jdt.launching.prefs"
 }
 
@@ -45,62 +60,92 @@ build() {
     install_jdk
     mkdir -p "$ROOT/bin"
     mapfile -d '' sources < <(find "$ROOT/src" -name '*.java' -print0)
-    "$JDK/bin/javac" -encoding UTF-8 -source 1.8 -target 1.8 \
+    "$JDK/bin/javac" -encoding UTF-8 --release 17 -Xlint:all -Werror \
         -cp "$ROOT/lib/mssql-jdbc-13.2.0.jre11.jar" -d "$ROOT/bin" "${sources[@]}"
+}
+
+db_up() {
+    docker compose -f "$ROOT/compose.yaml" up -d --wait sqlserver
+    local exists
+    exists=$(sqlcmd -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE name=N'cua_hang_tien_loi'" | tr -d '\r[:space:]')
+    if [[ "$exists" == 0 ]]; then
+        mkdir -p "$LOCAL"
+        sqlcmd -o /tmp/pos-schema-init.log < "$ROOT/sql/ScriptMySql.sql"
+        docker compose -f "$ROOT/compose.yaml" cp sqlserver:/tmp/pos-schema-init.log "$LOCAL/schema-init.log"
+        printf '%s\n' "Schema initialized; details: $LOCAL/schema-init.log"
+    fi
+    sqlcmd -Q "IF (SELECT COUNT(*) FROM cua_hang_tien_loi.sys.tables WHERE is_ms_shipped=0) <> 17 THROW 50001, 'Schema initialization incomplete; inspect database without resetting it.', 1;"
+    # Local generated credentials use only letters, digits, ! and hex; reject SQL metacharacters.
+    [[ "$POS_DB_USER" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && "$POS_DB_PASSWORD" =~ ^[A-Za-z0-9!]+$ ]] || { echo 'Invalid local credential characters' >&2; exit 1; }
+    sqlcmd -Q "IF SUSER_ID(N'$POS_DB_USER') IS NULL CREATE LOGIN [$POS_DB_USER] WITH PASSWORD=N'$POS_DB_PASSWORD'; USE cua_hang_tien_loi; IF USER_ID(N'$POS_DB_USER') IS NULL CREATE USER [$POS_DB_USER] FOR LOGIN [$POS_DB_USER]; ALTER ROLE db_datareader ADD MEMBER [$POS_DB_USER]; ALTER ROLE db_datawriter ADD MEMBER [$POS_DB_USER];"
+    migrate_db cua_hang_tien_loi
+}
+
+sqlcmd() {
+    docker compose -f "$ROOT/compose.yaml" exec -T sqlserver /bin/bash -c \
+        'export SQLCMDPASSWORD="$MSSQL_SA_PASSWORD"; exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b "$@"' -- "$@"
+}
+
+migrate_db() {
+    local database="$1"
+    sqlcmd -d "$database" < "$ROOT/sql/migrations/20261117_audit.sql"
+    local prefix
+    for prefix in NV KH KM LSP NCC PN DC HD; do
+        sqlcmd -d "$database" -Q "GRANT UPDATE ON OBJECT::dbo.POS_SEQ_$prefix TO [$POS_DB_USER];"
+    done
+}
+
+backend_test() {
+    cd "$ROOT"
+    mkdir -p "$LOCAL"
+    local database="${POS_TEST_DB_NAME:-pos_test_audit_20261117}"
+    [[ "$database" =~ ^pos_test_[A-Za-z0-9_]+$ ]] || { echo 'Refusing unsafe test database name; use pos_test_*.' >&2; exit 1; }
+    export POS_DB_URL="jdbc:sqlserver://127.0.0.1:14330;databaseName=$database;encrypt=true;trustServerCertificate=true"
+    docker compose -f "$ROOT/compose.yaml" up -d --wait sqlserver
+    local exists
+    exists=$(sqlcmd -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE name=N'$database'" | tr -d '\r[:space:]')
+    if [[ "$exists" == 0 ]]; then
+        sed "s/cua_hang_tien_loi/$database/g" "$ROOT/sql/ScriptMySql.sql" | sqlcmd > "$LOCAL/test-schema-init.log"
+    fi
+    [[ "$POS_DB_USER" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && "$POS_DB_PASSWORD" =~ ^[A-Za-z0-9!]+$ ]] || { echo 'Invalid local credential characters' >&2; exit 1; }
+    sqlcmd -Q "IF SUSER_ID(N'$POS_DB_USER') IS NULL CREATE LOGIN [$POS_DB_USER] WITH PASSWORD=N'$POS_DB_PASSWORD'; USE [$database]; IF USER_ID(N'$POS_DB_USER') IS NULL CREATE USER [$POS_DB_USER] FOR LOGIN [$POS_DB_USER]; ALTER ROLE db_datareader ADD MEMBER [$POS_DB_USER]; ALTER ROLE db_datawriter ADD MEMBER [$POS_DB_USER];"
+    migrate_db "$database"
+    build
+    export POS_TEST_ADMIN_PASSWORD="$SQLSERVER_SA_PASSWORD"
+    if [[ "${1:-backend}" == gui ]]; then
+        xvfb-run -a -s '-screen 0 1600x1000x24' timeout 180 "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" testsupport.PosGuiSmoke
+    else
+        "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" testsupport.BackendSmoke
+        "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" testsupport.BackendTransactionSmoke
+    fi
 }
 
 case "${1:-help}" in
     setup)
         install_jdk
-        install_eclipse
-        configure_eclipse
-        docker compose -f "$ROOT/compose.yaml" pull
+        db_up
+        build
         ;;
     eclipse)
         install_jdk
-        install_eclipse
         configure_eclipse
+        install_eclipse
         exec "$ECLIPSE/eclipse" -data "$WORKSPACE"
         ;;
-    db-up)
-        docker compose -f "$ROOT/compose.yaml" up -d --wait
-        ;;
-    db-down)
-        docker compose -f "$ROOT/compose.yaml" down
-        ;;
-    build)
+    db-up) db_up ;;
+    db-down) docker compose -f "$ROOT/compose.yaml" stop sqlserver ;;
+    build) build ;;
+    backend-test) backend_test ;;
+    gui-test) backend_test gui ;;
+    run|smoke)
+        db_up
         build
+        [[ -n "${POS_DB_PASSWORD:-}" ]] || { echo 'POS_DB_PASSWORD required' >&2; exit 1; }
+        if [[ "$1" == run ]]; then
+            exec "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" graphicUI.PosApplication
+        elif [[ "$1" == smoke ]]; then
+            "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" graphicUI.PosApplication --db-smoke
+        fi
         ;;
-    run)
-        "$0" db-up
-        build
-        POS_DB_URL="${POS_DB_URL:-jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi}" \
-        POS_DB_USER="${POS_DB_USER:-cua_hang_app}" POS_DB_PASSWORD="${POS_DB_PASSWORD:-cua_hang_dev}" \
-            exec "$JDK/bin/java" -cp "$ROOT/bin:$ROOT/lib/mariadb-java-client-3.5.7.jar" graphicUI.PosApplication
-        ;;
-    smoke)
-        "$0" db-up
-        build
-        POS_DB_URL=jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi \
-        POS_DB_USER=cua_hang_app POS_DB_PASSWORD=cua_hang_dev \
-            "$JDK/bin/java" -cp "$ROOT/bin:$ROOT/lib/mariadb-java-client-3.5.7.jar" graphicUI.PosApplication --db-smoke
-        ;;
-    backend-test)
-        "$0" db-up
-        build
-        POS_DB_URL=jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi \
-        POS_DB_USER=cua_hang_app POS_DB_PASSWORD=cua_hang_dev \
-            "$JDK/bin/java" -cp "$ROOT/bin:$ROOT/lib/mariadb-java-client-3.5.7.jar" testsupport.BackendSmoke
-        POS_DB_URL=jdbc:mariadb://127.0.0.1:3307/cua_hang_tien_loi \
-        POS_DB_USER=cua_hang_app POS_DB_PASSWORD=cua_hang_dev \
-            "$JDK/bin/java" -cp "$ROOT/bin:$ROOT/lib/mariadb-java-client-3.5.7.jar" testsupport.BackendTransactionSmoke
-        ;;
-    wipe)
-        docker compose -f "$ROOT/compose.yaml" down --volumes --remove-orphans
-        [[ ! -e "$LOCAL" ]] || find "$LOCAL" -depth -delete
-        [[ ! -e "$ROOT/bin" ]] || find "$ROOT/bin" -depth -delete
-        ;;
-    help|*)
-        printf '%s\n' 'Usage: ./dev {setup|eclipse|db-up|db-down|build|run|smoke|backend-test|wipe}'
-        ;;
+    *) printf '%s\n' 'Usage: ./dev {setup|eclipse|db-up|db-down|build|run|smoke|backend-test|gui-test}' ;;
 esac

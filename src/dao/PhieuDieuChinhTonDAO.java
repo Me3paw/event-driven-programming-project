@@ -37,18 +37,7 @@ public class PhieuDieuChinhTonDAO {
     }
   }
   public String nextId(Connection c) throws SQLException {
-    try (PreparedStatement s =
-             c.prepareStatement("SELECT MAX(ma_dieu_chinh) FROM PHIEU_DIEU_CHINH_TON")) {
-      try (ResultSet r = s.executeQuery()) {
-        int next = 1;
-        if (r.next()) {
-          String max = r.getString(1);
-          if (max != null && max.matches("DC[0-9]+"))
-            next = Integer.parseInt(max.substring(2)) + 1;
-        }
-        return String.format("DC%03d", next);
-      }
-    }
+    return IdDAO.next("DC", c);
   }
   public List<PhieuDieuChinhTon> search(String keyword, Connection c) throws SQLException {
     List<PhieuDieuChinhTon> out = new ArrayList<PhieuDieuChinhTon>();

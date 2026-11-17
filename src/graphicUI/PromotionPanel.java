@@ -264,7 +264,7 @@ public final class PromotionPanel extends JPanel {
         validator.matches(id, "KM[0-9]{3}",
                 "Mã khuyến mãi sai định dạng, phải có dạng KM + đúng 3 số (ví dụ: KM001).");
         validator.require(name, "Tên khuyến mãi không được để trống.");
-        validator.matches(name, "Khuyến mãi[\\p{L}0-9\\s-]*",
+        validator.matches(name, service.ValidationRules.PROMOTION_NAME,
                 "Tên khuyến mãi sai định dạng, phải bắt đầu bằng \"Khuyến mãi\" (ví dụ: Khuyến mãi giảm 10%).");
         validator.require(rate, "Tỷ lệ % không được để trống.");
         validator.number(rate, "Tỷ lệ % phải là số.");

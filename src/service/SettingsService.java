@@ -19,14 +19,14 @@ public class SettingsService {
   }
   public void luu(Actor actor, CauHinhCuaHang value) throws SQLException {
     Access.manager(actor);
-    luu(value);
+    luuInternal(actor, value);
   }
   private CauHinhCuaHang lay() throws SQLException {
     try (Connection c = DBConnection.open()) {
       return dao.get(c);
     }
   }
-  private void luu(CauHinhCuaHang value) throws SQLException {
+  private void luuInternal(Actor actor, CauHinhCuaHang value) throws SQLException {
     if (value == null)
       throw new IllegalArgumentException("Thiếu cấu hình cửa hàng");
     if (blank(value.getTenCuaHang()) || value.getTenCuaHang().trim().length() > 100)
@@ -39,8 +39,10 @@ public class SettingsService {
     BigDecimal rate = value.getTyLeVat();
     if (rate == null || rate.signum() < 0 || rate.compareTo(new BigDecimal("100")) > 0)
       throw new IllegalArgumentException("VAT không hợp lệ");
-    try (Connection c = DBConnection.open()) {
+    try (SessionTransaction transaction = new SessionTransaction(actor, true, false)) {
+      Connection c = transaction.connection();
       dao.save(value, c);
+      transaction.commit();
     }
   }
   private boolean blank(String value) {

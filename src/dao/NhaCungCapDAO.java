@@ -71,17 +71,7 @@ public class NhaCungCapDAO {
     return out;
   }
   public String nextId(Connection c) throws SQLException {
-    try (PreparedStatement s = c.prepareStatement("SELECT MAX(ma_nha_cung_cap) FROM NHA_CUNG_CAP")) {
-      try (ResultSet r = s.executeQuery()) {
-        int next = 1;
-        if (r.next()) {
-          String max = r.getString(1);
-          if (max != null && max.matches("NCC[0-9]+"))
-            next = Integer.parseInt(max.substring(3)) + 1;
-        }
-        return String.format("NCC%03d", next);
-      }
-    }
+    return IdDAO.next("NCC", c);
   }
   public void delete(String id, Connection c) throws SQLException {
     try (PreparedStatement s =

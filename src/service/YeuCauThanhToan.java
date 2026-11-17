@@ -17,6 +17,29 @@ public class YeuCauThanhToan {
   private boolean thanhToanDienTuThanhCong;
   private String maThamChieuThanhToan;
   private List<DongThanhToan> dongHang = new ArrayList<DongThanhToan>();
+  public YeuCauThanhToan copy() {
+    YeuCauThanhToan copy = new YeuCauThanhToan();
+    copy.maHoaDon = maHoaDon;
+    copy.maNhanVien = maNhanVien;
+    copy.maKhachHang = maKhachHang;
+    copy.maKhuyenMai = maKhuyenMai;
+    copy.loaiGiamGia = loaiGiamGia;
+    copy.diemThuongSuDung = diemThuongSuDung;
+    copy.phuongThucThanhToan = phuongThucThanhToan;
+    copy.tienKhachDua = tienKhachDua;
+    copy.thanhToanDienTuThanhCong = thanhToanDienTuThanhCong;
+    copy.maThamChieuThanhToan = maThamChieuThanhToan;
+    if (dongHang == null) copy.dongHang = null;
+    else for (DongThanhToan line : dongHang) {
+      if (line == null) { copy.dongHang.add(null); continue; }
+      DongThanhToan item = new DongThanhToan();
+      item.setMaSanPham(line.getMaSanPham());
+      item.setSoLuong(line.getSoLuong());
+      copy.dongHang.add(item);
+    }
+    return copy;
+  }
+
   public String getMaHoaDon() {
     return maHoaDon;
   }

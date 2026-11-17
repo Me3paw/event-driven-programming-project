@@ -67,7 +67,7 @@ public class BaoCaoDAO {
     String q = "SELECT d.ma_san_pham,s.ten_san_pham,SUM(d.so_luong),SUM(d.thanh_tien) FROM "
         + "CHI_TIET_HOA_DON d JOIN HOA_DON h ON h.ma_hoa_don=d.ma_hoa_don JOIN SAN_PHAM s "
         + "ON s.ma_san_pham=d.ma_san_pham WHERE h.trang_thai='DA_THANH_TOAN' "
-        + "AND s.trang_thai='DANG_KINH_DOANH' AND "
+        + "AND "
         + "CAST(h.thoi_diem_lap AS DATE) BETWEEN ? AND ? GROUP BY d.ma_san_pham,s.ten_san_pham "
         + "ORDER BY SUM(d.so_luong) DESC,d.ma_san_pham";
     try (PreparedStatement s = c.prepareStatement(q)) {

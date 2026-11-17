@@ -196,11 +196,11 @@ public final class ProductPanel extends JPanel {
         validator.number(price, "Giá bán phải là số.");
         validator.check(price, text -> {
             try {
-                return new BigDecimal(text).signum() > 0;
+                return new BigDecimal(text).signum() >= 0;
             } catch (NumberFormatException exception) {
                 return true;
             }
-        }, "Giá bán phải lớn hơn 0.");
+        }, "Giá bán không được âm.");
         validator.require(minimum, "Ngưỡng tồn không được để trống.");
         validator.check(minimum, text -> text.matches("\\d+"),
                 "Ngưỡng tồn phải là số nguyên không âm.");

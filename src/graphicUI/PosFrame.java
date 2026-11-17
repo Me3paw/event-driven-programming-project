@@ -3,6 +3,7 @@ package graphicUI;
 import components.DialogActions;
 import components.FormValidator;
 import components.ReceiptPrintable;
+import components.ReceiptPrinting;
 import components.ReceiptPdfExporter;
 import components.UiFormat;
 import components.UiTheme;
@@ -93,6 +94,78 @@ public final class PosFrame extends JFrame {
     private Actor actor;
     private JButton selectedNavigation;
 
+    private final java.util.Map<String, SaleUiState> savedSales = new java.util.HashMap<String, SaleUiState>();
+    private final java.util.Map<DefaultTableModel, SaleUiState> cartStates = new java.util.IdentityHashMap<DefaultTableModel, SaleUiState>();
+    private SaleUiState saleState;
+
+    private static final class SaleUiState {
+        private long revision;
+        private long promotionRevision;
+        private boolean applyingQuote;
+        private boolean quoted;
+        private boolean busy;
+        private boolean locked;
+        private YeuCauThanhToan pending;
+        private JPanel panel;
+        private JButton btnThanhToan;
+        private JLabel lblTongThanhToan;
+        private Runnable refresh;
+        private final java.util.Map<Component, Boolean> enabled = new java.util.IdentityHashMap<Component, Boolean>();
+    }
+
+    private static final class ScrollableFields extends JPanel implements javax.swing.Scrollable {
+        private static final long serialVersionUID = 1L;
+        private ScrollableFields() { setLayout(new BoxLayout(this, BoxLayout.Y_AXIS)); }
+        @Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+        @Override public int getScrollableUnitIncrement(Rectangle visible, int orientation, int direction) { return 20; }
+        @Override public int getScrollableBlockIncrement(Rectangle visible, int orientation, int direction) { return Math.max(20, visible.height - 20); }
+        @Override public boolean getScrollableTracksViewportWidth() { return true; }
+        @Override public boolean getScrollableTracksViewportHeight() { return false; }
+    }
+
+    private void invalidateQuote(SaleUiState state) {
+        if (state == null || state.applyingQuote) return;
+        state.revision++;
+        state.quoted = false;
+        if (state.lblTongThanhToan != null) state.lblTongThanhToan.setText("Đang tính…");
+        if (state.btnThanhToan != null && state.pending == null) state.btnThanhToan.setEnabled(false);
+    }
+
+    private void setSaleLocked(SaleUiState state, boolean locked) {
+        if (state.locked != locked) {
+            state.locked = locked;
+            if (locked) saveEnabled(state.panel, state);
+            else {
+                for (java.util.Map.Entry<Component, Boolean> entry : state.enabled.entrySet())
+                    entry.getKey().setEnabled(entry.getValue().booleanValue());
+                state.enabled.clear();
+            }
+        }
+        if (state.btnThanhToan != null) {
+            state.btnThanhToan.setText(state.pending != null && !state.busy ? "Kiểm tra lại thanh toán" : "Thanh toán");
+            state.btnThanhToan.setEnabled(!state.busy && (state.pending != null || state.quoted));
+        }
+    }
+
+    private void saveEnabled(Component component, SaleUiState state) {
+        state.enabled.put(component, Boolean.valueOf(component.isEnabled()));
+        component.setEnabled(false);
+        if (component instanceof java.awt.Container)
+            for (Component child : ((java.awt.Container) component).getComponents()) saveEnabled(child, state);
+    }
+
+    private void sessionExpired(Actor expired) {
+        if (actor != expired) return;
+        if (saleState != null) { invalidateQuote(saleState); saleState.promotionRevision++; }
+        actor = null;
+        role = CASHIER;
+        showLogin();
+        revalidate();
+        repaint();
+        JOptionPane.showMessageDialog(this,
+                "Phiên đăng nhập đã hết hiệu lực. Giỏ hàng được giữ riêng cho tài khoản này. Hãy đăng nhập lại.");
+    }
+
     public PosFrame() {
         super("POS Cửa Hàng Tiện Lợi");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -164,6 +237,10 @@ public final class PosFrame extends JFrame {
                         password.setText("");
                         try {
                             actor = get();
+                            final Actor loggedIn = actor;
+                            loggedIn.onInvalidated(() -> javax.swing.SwingUtilities.invokeLater(() -> sessionExpired(loggedIn)));
+                            saleState = savedSales.computeIfAbsent(actor.getTenDangNhap(), key -> new SaleUiState());
+                            invalidateQuote(saleState);
                             role = actor.getVaiTro();
                             showShell();
                         } catch (Exception exception) {
@@ -216,6 +293,7 @@ public final class PosFrame extends JFrame {
         root.add(sidebar(), BorderLayout.WEST);
         root.add(main(), BorderLayout.CENTER);
         setContentPane(root);
+        getRootPane().setDefaultButton(null);
         bindShortcuts();
         showPage("dashboard", null);
         revalidate();
@@ -280,9 +358,13 @@ public final class PosFrame extends JFrame {
         logout.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent event) {
+                if (saleState != null && saleState.busy) return;
+                invalidateQuote(saleState);
                 actor = null;
                 role = CASHIER;
                 showLogin();
+                revalidate();
+                repaint();
             }
         });
         account.add(logout);
@@ -333,7 +415,8 @@ public final class PosFrame extends JFrame {
     private void addPages() {
         pages.removeAll();
         pages.add(dashboard(), "dashboard");
-        pages.add(sale(), "sale");
+        pages.add(saleState.panel == null ? sale() : saleState.panel, "sale");
+        if (saleState.refresh != null) saleState.refresh.run();
         pages.add(new CustomerPanel(actor), "customers");
         pages.add(new ProductPanel(actor, MANAGER.equals(role)), "products");
         pages.add(new CategoryPanel(actor, MANAGER.equals(role)), "categories");
@@ -521,7 +604,9 @@ public final class PosFrame extends JFrame {
     }
 
     private JPanel sale() {
+        final SaleUiState state = saleState;
         JPanel panel = page();
+        state.panel = panel;
         final DefaultTableModel cart =
                 new DefaultTableModel(new String[] {"Mã", "Sản phẩm", "SL", "Đơn giá", "Giảm dòng", "Thành tiền", "Thao tác"}, 0) {
                     @Override
@@ -529,6 +614,7 @@ public final class PosFrame extends JFrame {
                         return false;
                     }
                 };
+        cartStates.put(cart, state);
         final JComboBox<SanPham> products = new JComboBox<SanPham>();
         final JComboBox<KhachHang> customers = new JComboBox<KhachHang>();
         final JComboBox<KhuyenMai> promotions = new JComboBox<KhuyenMai>();
@@ -594,6 +680,7 @@ public final class PosFrame extends JFrame {
         add.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent event) {
+                if (state.locked || state.busy) return;
                 final SanPham selected = (SanPham) products.getSelectedItem();
                 if (selected == null) {
                     JOptionPane.showMessageDialog(PosFrame.this, "Tìm và chọn sản phẩm đang kinh doanh.");
@@ -606,6 +693,7 @@ public final class PosFrame extends JFrame {
                 checkStock(needed, new Runnable() {
                     @Override
                     public void run() {
+                        if (state.locked || state.busy) return;
                         addCartLine(cart, selected, amount);
                         product.setText("");
                         status.setText(previous == null
@@ -632,6 +720,13 @@ public final class PosFrame extends JFrame {
         addConstraints.anchor = GridBagConstraints.EAST;
         addConstraints.insets = new Insets(2, 4, 2, 4);
         productForm.add(add, addConstraints);
+        productForm.removeAll();
+        place(productForm, productLabel, 0, 0, 1.0, GridBagConstraints.HORIZONTAL);
+        place(productForm, product, 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
+        place(productForm, products, 0, 2, 1.0, GridBagConstraints.HORIZONTAL);
+        place(productForm, quantityLabel, 0, 3, 1.0, GridBagConstraints.HORIZONTAL);
+        place(productForm, quantity, 0, 4, 1.0, GridBagConstraints.HORIZONTAL);
+        place(productForm, add, 0, 5, 1.0, GridBagConstraints.HORIZONTAL);
         JPanel addCard = titledCard("Thêm sản phẩm", productForm);
 
         final Runnable refreshQuoteAction = new Runnable() {
@@ -710,6 +805,11 @@ public final class PosFrame extends JFrame {
         loyaltyConstraints.anchor = GridBagConstraints.WEST;
         loyaltyConstraints.insets = new Insets(2, 4, 2, 4);
         customerForm.add(loyalty, loyaltyConstraints);
+        customerForm.removeAll();
+        place(customerForm, customerLabel, 0, 0, 1.0, GridBagConstraints.HORIZONTAL);
+        place(customerForm, customer, 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
+        place(customerForm, customers, 0, 2, 1.0, GridBagConstraints.HORIZONTAL);
+        place(customerForm, loyalty, 0, 3, 1.0, GridBagConstraints.HORIZONTAL);
         JPanel customerCard = titledCard("Thông tin khách hàng", customerForm);
         syncRewards.run();
         findProducts("", products, false);
@@ -727,13 +827,13 @@ public final class PosFrame extends JFrame {
         segGroup.add(segEvent);
         segNone.setSelected(true);
         segNone.addActionListener(new ActionListener() {
-            @Override public void actionPerformed(ActionEvent event) { noDiscount.setSelected(true); }
+            @Override public void actionPerformed(ActionEvent event) { noDiscount.doClick(); }
         });
         segTier.addActionListener(new ActionListener() {
-            @Override public void actionPerformed(ActionEvent event) { tierDiscount.setSelected(true); }
+            @Override public void actionPerformed(ActionEvent event) { tierDiscount.doClick(); }
         });
         segEvent.addActionListener(new ActionListener() {
-            @Override public void actionPerformed(ActionEvent event) { eventDiscount.setSelected(true); }
+            @Override public void actionPerformed(ActionEvent event) { eventDiscount.doClick(); }
         });
         segRow.add(segNone);
         segRow.add(segTier);
@@ -792,6 +892,8 @@ public final class PosFrame extends JFrame {
             }
         });
         JButton checkout = new JButton("Thanh toán");
+        state.btnThanhToan = checkout;
+        state.lblTongThanhToan = total;
         checkout.setBackground(UiTheme.BLUE);
         checkout.setForeground(Color.WHITE);
         checkout.setOpaque(true);
@@ -801,26 +903,35 @@ public final class PosFrame extends JFrame {
         checkout.setMargin(new Insets(8, 0, 8, 0));
         checkout.setEnabled(false);
         checkout.setToolTipText("Giỏ hàng đang trống — hãy thêm sản phẩm");
-        checkout.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                YeuCauThanhToan request = paymentRequest(cart, (KhachHang) customers.getSelectedItem(),
+        checkout.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submitCheckout");
+        checkout.getActionMap().put("submitCheckout", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) { checkout.doClick(); }
+        });
+        checkout.addActionListener(event -> {
+            if (state.busy || actor == null || actor.isInvalid()) return;
+            YeuCauThanhToan request = state.pending;
+            if (request == null) {
+                request = paymentRequest(cart, (KhachHang) customers.getSelectedItem(),
                         (KhuyenMai) promotions.getSelectedItem(), tierDiscount.isSelected(), eventDiscount.isSelected(),
                         rewards.getText().trim(), String.valueOf(method.getSelectedItem()), tender.getText().trim(),
                         "THÀNH CÔNG".equals(result.getSelectedItem()));
-                if (request != null
-                        && JOptionPane.showConfirmDialog(
-                                   PosFrame.this, "Xác nhận thanh toán?", "Thanh toán", JOptionPane.YES_NO_OPTION)
-                                == JOptionPane.YES_OPTION) {
-                    checkout(request, cart, product, products, quantity, customer, customers, promotions, noDiscount,
-                            rewards, tender, method, result, subtotal, discount, reward, vat, total, change, loyalty);
+                if (request == null) return;
+                state.busy = true;
+                setSaleLocked(state, true);
+                if (JOptionPane.showConfirmDialog(PosFrame.this, "Xác nhận thanh toán?", "Thanh toán",
+                        JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+                    state.busy = false;
+                    setSaleLocked(state, false);
+                    return;
                 }
             }
+            checkout(request, cart, product, products, quantity, customer, customers, promotions, noDiscount,
+                    rewards, tender, method, result, subtotal, discount, reward, vat, total, change, loyalty);
         });
         JPanel payBody = new JPanel(new BorderLayout(0, 8));
         payBody.setOpaque(false);
         payBody.add(payFields, BorderLayout.CENTER);
-        payBody.add(checkout, BorderLayout.SOUTH);
+
         JPanel payCard = titledCard("Thanh toán", payBody);
 
         final Runnable refresh = new Runnable() {
@@ -885,6 +996,7 @@ public final class PosFrame extends JFrame {
 
         JTable table = new JTable(cart);
         table.setRowHeight(30);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         DefaultTableCellRenderer center = new DefaultTableCellRenderer();
         center.setHorizontalAlignment(SwingConstants.CENTER);
@@ -917,6 +1029,7 @@ public final class PosFrame extends JFrame {
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
+                if (state.locked || state.busy) return;
                 int viewRow = table.rowAtPoint(event.getPoint());
                 int viewCol = table.columnAtPoint(event.getPoint());
                 if (viewRow < 0 || viewCol != 6)
@@ -965,21 +1078,37 @@ public final class PosFrame extends JFrame {
             boolean empty = cart.getRowCount() == 0;
             tableCards.show(tableArea, empty ? "empty" : "table");
             summaryLabel.setText(cart.getRowCount() + " món");
-            checkout.setEnabled(!empty);
+            if (!state.applyingQuote && event.getColumn() != 4 && event.getColumn() != 5) {
+                invalidateQuote(state);
+                if (empty) {
+                    for (JLabel label : new JLabel[] {subtotal, discount, reward, vat, total, change}) label.setText("0");
+                }
+            }
+            checkout.setEnabled(!state.busy && (state.pending != null || (!empty && state.quoted)));
             checkout.setToolTipText(empty ? "Giỏ hàng đang trống — hãy thêm sản phẩm" : null);
         });
 
-        JPanel side = FormValidator.form();
+        JPanel side = new ScrollableFields();
         side.setOpaque(false);
         side.add(addCard);
         side.add(customerCard);
         side.add(promoCard);
         side.add(payCard);
-        side.add(totalsCard);
+
         JPanel rightWrap = new JPanel(new BorderLayout());
         rightWrap.setOpaque(false);
-        rightWrap.add(side, BorderLayout.NORTH);
-        rightWrap.setPreferredSize(new Dimension(370, 1));
+        JScrollPane fieldsScroll = new JScrollPane(side, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        fieldsScroll.setBorder(null);
+        fieldsScroll.getVerticalScrollBar().setUnitIncrement(20);
+        rightWrap.add(fieldsScroll, BorderLayout.CENTER);
+        JPanel paymentFooter = new JPanel(new BorderLayout(0, 6));
+        paymentFooter.setOpaque(false);
+        paymentFooter.add(totalsCard, BorderLayout.CENTER);
+        paymentFooter.add(checkout, BorderLayout.SOUTH);
+        rightWrap.add(paymentFooter, BorderLayout.SOUTH);
+        rightWrap.setPreferredSize(new Dimension(390, 1));
+        rightWrap.setMinimumSize(new Dimension(330, 1));
 
         JPanel leftCol = new JPanel(new GridBagLayout());
         leftCol.setOpaque(false);
@@ -1010,6 +1139,14 @@ public final class PosFrame extends JFrame {
         columns.add(leftCol, leftArea);
         columns.add(rightWrap, rightArea);
         panel.add(columns, BorderLayout.CENTER);
+        state.refresh = refresh;
+        // Tab navigation scrolls off-screen inputs into view.
+        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("focusOwner", event -> {
+            Object focused = event.getNewValue();
+            if (focused instanceof JComponent && javax.swing.SwingUtilities.isDescendingFrom((JComponent) focused, side))
+                ((JComponent) focused).scrollRectToVisible(new Rectangle(0, 0,
+                        ((JComponent) focused).getWidth(), ((JComponent) focused).getHeight()));
+        });
         return panel;
     }
 
@@ -1050,7 +1187,6 @@ public final class PosFrame extends JFrame {
 
     private static JLabel posLabel(String text) {
         JLabel label = new JLabel(text);
-        label.setPreferredSize(new Dimension(140, label.getPreferredSize().height));
         return label;
     }
 
@@ -1261,14 +1397,16 @@ public final class PosFrame extends JFrame {
 
     private void findProducts(final String keyword, final JComboBox<SanPham> products, final boolean notify,
             final JTextField source) {
+        final Actor requestActor = actor;
+        final SaleUiState requestState = saleState;
         new SwingWorker<List<SanPham>, Void>() {
             @Override
             protected List<SanPham> doInBackground() throws Exception {
-                return new MasterDataService().timSanPham(actor, keyword, null, "DANG_KINH_DOANH", null, null);
+                return new MasterDataService().timSanPham(requestActor, keyword, null, "DANG_KINH_DOANH", null, null);
             }
             @Override
             protected void done() {
-                if (actor == null) return;
+                if (actor != requestActor || requestState != saleState || (requestState != null && requestState.locked)) return;
                 if (source != null && !source.getText().trim().equals(keyword)) return;
                 try {
                     List<SanPham> found = get();
@@ -1310,14 +1448,16 @@ public final class PosFrame extends JFrame {
 
     private void findCustomers(final String keyword, final JComboBox<KhachHang> customers,
             final JLabel loyalty, final Runnable afterLoad, final JTextField source) {
+        final Actor requestActor = actor;
+        final SaleUiState requestState = saleState;
         new SwingWorker<List<KhachHang>, Void>() {
             @Override
             protected List<KhachHang> doInBackground() throws Exception {
-                return new MasterDataService().timKhachHang(actor, keyword, "HOAT_DONG");
+                return new MasterDataService().timKhachHang(requestActor, keyword, "HOAT_DONG");
             }
             @Override
             protected void done() {
-                if (actor == null) return;
+                if (actor != requestActor || requestState != saleState || (requestState != null && requestState.locked)) return;
                 if (source != null && !source.getText().trim().equals(keyword)) return;
                 try {
                     List<KhachHang> found = get();
@@ -1420,13 +1560,15 @@ public final class PosFrame extends JFrame {
     }
 
     private void checkStock(final java.util.Map<String, Integer> needed, final Runnable onOk) {
+        final Actor requestActor = actor;
+        final SaleUiState requestState = saleState;
         new SwingWorker<java.util.Map<String, Integer>, Void>() {
             @Override
             protected java.util.Map<String, Integer> doInBackground() throws Exception {
                 java.util.Map<String, Integer> shortage = new java.util.LinkedHashMap<String, Integer>();
                 SaleService sales = new SaleService();
                 for (java.util.Map.Entry<String, Integer> entry : needed.entrySet()) {
-                    int available = sales.tonKho(actor, entry.getKey());
+                    int available = sales.tonKho(requestActor, entry.getKey());
                     if (entry.getValue().intValue() > available)
                         shortage.put(entry.getKey(), Integer.valueOf(available));
                 }
@@ -1435,7 +1577,7 @@ public final class PosFrame extends JFrame {
 
             @Override
             protected void done() {
-                if (actor == null) return;
+                if (actor != requestActor || requestState != saleState || (requestState != null && requestState.locked)) return;
                 try {
                     java.util.Map<String, Integer> shortage = get();
                     if (!shortage.isEmpty()) {
@@ -1457,6 +1599,11 @@ public final class PosFrame extends JFrame {
 
     private void loadPromotions(DefaultTableModel cart, final JComboBox<KhuyenMai> promotions,
             final Runnable afterLoad) {
+        final SaleUiState state = cartStates.get(cart);
+        if (state == null || state.locked || state != saleState || actor == null) return;
+        final Actor requestActor = actor;
+        final long revision = ++state.promotionRevision;
+        final java.util.Map<String, Integer> quantities = cartQuantities(cart);
         final java.util.Set<String> productIds = new LinkedHashSet<String>();
         java.math.BigDecimal subtotal = java.math.BigDecimal.ZERO;
         for (int row = 0; row < cart.getRowCount(); row++) {
@@ -1468,11 +1615,12 @@ public final class PosFrame extends JFrame {
         new SwingWorker<List<KhuyenMai>, Void>() {
             @Override
             protected List<KhuyenMai> doInBackground() throws Exception {
-                return new SaleService().activePromotions(actor, productIds, cartSubtotal, LocalDateTime.now());
+                return new SaleService().activePromotions(requestActor, productIds, cartSubtotal, LocalDateTime.now());
             }
             @Override
             protected void done() {
-                if (actor == null) return;
+                if (actor != requestActor || state != saleState || state.locked
+                        || state.promotionRevision != revision || !quantities.equals(cartQuantities(cart))) return;
                 try {
                     promotions.removeAllItems();
                     for (KhuyenMai promotion : get()) promotions.addItem(promotion);
@@ -1501,16 +1649,16 @@ public final class PosFrame extends JFrame {
         }
         final long rewardPoints;
         try {
-            String digits = rewards.replaceAll("[.,\\s]", "");
+            String digits = rewards.trim();
             rewardPoints = Long.parseLong(digits.length() == 0 ? "0" : digits);
         } catch (NumberFormatException exception) {
             if (!quiet)
                 JOptionPane.showMessageDialog(this, "Điểm thưởng phải là số nguyên không âm.");
             return null;
         }
-        if (rewardPoints < 0 || rewardPoints % 1000 != 0) {
+        if (rewardPoints < 0) {
             if (!quiet)
-                JOptionPane.showMessageDialog(this, "Điểm thưởng phải là bội số của 1000 (1000 điểm = 1000đ).");
+                JOptionPane.showMessageDialog(this, "Điểm thưởng phải là số nguyên không âm (1 điểm = 1đ).");
             return null;
         }
         if (rewardPoints > 0) {
@@ -1567,8 +1715,10 @@ public final class PosFrame extends JFrame {
             JRadioButton eventDiscount, JTextField rewards, JComboBox<String> method,
             JTextField tender, JComboBox<String> result, JLabel subtotal, JLabel discount,
             JLabel reward, JLabel vat, JLabel total, JLabel change) {
-        if (cart.getRowCount() == 0)
-            return;
+        SaleUiState state = cartStates.get(cart);
+        if (state == null || state.locked || actor == null || state != saleState) return;
+        invalidateQuote(state);
+        if (cart.getRowCount() == 0) { state.lblTongThanhToan.setText("0"); return; }
         YeuCauThanhToan request = paymentRequest(cart, (KhachHang) customers.getSelectedItem(),
                 (KhuyenMai) promotions.getSelectedItem(), tierDiscount.isSelected(),
                 eventDiscount.isSelected(), rewards.getText().trim(),
@@ -1580,29 +1730,42 @@ public final class PosFrame extends JFrame {
 
     private void quote(final YeuCauThanhToan request, final DefaultTableModel cart, final JLabel subtotal,
             final JLabel discount, final JLabel reward, final JLabel vat, final JLabel total, final JLabel change) {
+        final SaleUiState state = cartStates.get(cart);
+        final long revision = state.revision;
+        final Actor quotedActor = actor;
+        final YeuCauThanhToan snapshot = request.copy();
         new SwingWorker<BaoGia, Void>() {
-            @Override
-            protected BaoGia doInBackground() throws Exception {
-                return new SaleService().baoGia(actor, request);
+            @Override protected BaoGia doInBackground() throws Exception {
+                return new SaleService().baoGia(quotedActor, snapshot);
             }
-            @Override
-            protected void done() {
-                if (actor == null) return;
+            @Override protected void done() {
+                if (actor != quotedActor || state != saleState || state.revision != revision || state.locked) return;
                 try {
                     HoaDon invoice = get().getHoaDon();
-                    int lines = Math.min(cart.getRowCount(), invoice.getChiTiet().size());
-                    for (int row = 0; row < lines; row++) {
-                        cart.setValueAt(invoice.getChiTiet().get(row).getTienGiamDong(), row, 4);
-                        cart.setValueAt(invoice.getChiTiet().get(row).getThanhTien(), row, 5);
-                    }
+                    java.util.Map<String, entity.ChiTietHoaDon> details = new java.util.HashMap<String, entity.ChiTietHoaDon>();
+                    for (entity.ChiTietHoaDon detail : invoice.getChiTiet()) details.put(detail.getMaSanPham(), detail);
+                    state.applyingQuote = true;
+                    try {
+                        for (int row = 0; row < cart.getRowCount(); row++) {
+                            entity.ChiTietHoaDon detail = details.get(String.valueOf(cart.getValueAt(row, 0)));
+                            if (detail == null) return;
+                            cart.setValueAt(detail.getTienGiamDong(), row, 4);
+                            cart.setValueAt(detail.getThanhTien(), row, 5);
+                        }
+                    } finally { state.applyingQuote = false; }
                     subtotal.setText(UiFormat.money(invoice.getTongGiaGoc()) + " đ");
                     discount.setText(UiFormat.money(invoice.getTienGiam()) + " đ");
                     reward.setText(UiFormat.money(invoice.getTienGiamDiem()) + " đ");
                     vat.setText(UiFormat.money(invoice.getTienVat()) + " đ");
                     total.setText(UiFormat.money(invoice.getTongThanhToan()) + " đ");
                     change.setText(UiFormat.money(invoice.getTienThua()) + " đ");
+                    state.quoted = true;
+                    state.btnThanhToan.setEnabled(!state.busy);
                 } catch (Exception exception) {
-                    exception.printStackTrace();
+                    state.quoted = false;
+                    total.setText("Chưa có tổng hợp lệ");
+                    state.btnThanhToan.setEnabled(false);
+                    status.setText("Chưa thể tính tổng. Kiểm tra giỏ hàng và dữ liệu thanh toán.");
                 }
             }
         }.execute();
@@ -1614,32 +1777,65 @@ public final class PosFrame extends JFrame {
             final JTextField rewards, final JTextField tender, final JComboBox<String> method,
             final JComboBox<String> result, final JLabel subtotal, final JLabel discount, final JLabel reward,
             final JLabel vat, final JLabel total, final JLabel change, final JLabel loyalty) {
-        new SwingWorker<Object[], Void>() {
-            @Override
-            protected Object[] doInBackground() throws Exception {
-                HoaDon paid = new SaleService().thanhToan(actor, request);
-                HoaDon invoice = new SaleService().chiTietHoaDon(actor, paid.getMaHoaDon());
-                CauHinhCuaHang store = new SettingsService().layChoHoaDon(actor);
-                return new Object[] {invoice, store};
+        final SaleUiState state = cartStates.get(cart);
+        final Actor payingActor = actor;
+        final boolean resolving = state.pending != null;
+        state.pending = request;
+        state.busy = true;
+        invalidateQuote(state);
+        setSaleLocked(state, true);
+        new SwingWorker<HoaDon, Void>() {
+            @Override protected HoaDon doInBackground() throws Exception {
+                return new SaleService().thanhToan(payingActor, request);
             }
-            @Override
-            protected void done() {
-                if (actor == null) return;
+            @Override protected void done() {
+                state.busy = false;
                 try {
-                    Object[] checkoutResult = get();
-                    HoaDon invoice = (HoaDon) checkoutResult[0];
+                    HoaDon invoice = get();
+                    // A committed invoice completes the cart before any receipt operation.
+                    state.pending = null;
                     resetSale(cart, productSearch, products, quantity, customerSearch, customers, promotions,
-                            noDiscount, rewards, tender, method, result, subtotal, discount, reward, vat, total, change,
-                            loyalty);
-                    status.setText(
-                            "Đã thanh toán " + invoice.getMaHoaDon() + ": " + invoice.getTongThanhToan() + " đ.");
+                            noDiscount, rewards, tender, method, result, subtotal, discount, reward, vat, total, change, loyalty);
+                    invalidateQuote(state);
+                    total.setText("0");
+                    setSaleLocked(state, false);
+                    if (actor != payingActor || state != saleState) return;
+                    status.setText("Đã thanh toán " + invoice.getMaHoaDon() + ": " + invoice.getTongThanhToan() + " đ.");
                     JOptionPane.showMessageDialog(PosFrame.this,
-                            "Thêm hóa đơn thành công: " + invoice.getMaHoaDon()
-                                    + "\nTổng thanh toán: " + invoice.getTongThanhToan() + " đ.",
-                            "Thanh toán thành công", JOptionPane.INFORMATION_MESSAGE);
-                    previewReceipt(new ReceiptPrintable((CauHinhCuaHang) checkoutResult[1], invoice));
+                            "Thanh toán thành công: " + invoice.getMaHoaDon(), "Thanh toán", JOptionPane.INFORMATION_MESSAGE);
+                    loadPaidReceipt(payingActor, invoice);
                 } catch (Exception exception) {
-                    showServiceError("Thanh toán không thành công", exception);
+                    Throwable cause = exception;
+                    while (cause.getCause() != null && cause instanceof java.util.concurrent.ExecutionException) cause = cause.getCause();
+                    boolean uncertain = resolving || cause instanceof service.CheckoutOutcomeUnknownException;
+                    if (!uncertain) state.pending = null;
+                    setSaleLocked(state, uncertain);
+                    if (actor != payingActor || state != saleState) return;
+                    if (uncertain) {
+                        JOptionPane.showMessageDialog(PosFrame.this, cause.getMessage(),
+                                "Cần kiểm tra kết quả thanh toán", JOptionPane.WARNING_MESSAGE);
+                    } else {
+                        showServiceError("Thanh toán không thành công", exception);
+                        if (state.refresh != null) state.refresh.run();
+                    }
+                }
+            }
+        }.execute();
+    }
+
+    private void loadPaidReceipt(final Actor paidActor, final HoaDon invoice) {
+        new SwingWorker<CauHinhCuaHang, Void>() {
+            @Override protected CauHinhCuaHang doInBackground() throws Exception {
+                return new SettingsService().layChoHoaDon(paidActor);
+            }
+            @Override protected void done() {
+                if (actor != paidActor) return;
+                try { previewReceipt(new ReceiptPrintable(get(), invoice)); }
+                catch (Exception exception) {
+                    int choice = JOptionPane.showConfirmDialog(PosFrame.this,
+                            "Thanh toán " + invoice.getMaHoaDon() + " đã thành công. Không tải được dữ liệu in. Thử lại hóa đơn?",
+                            "Thanh toán thành công — lỗi hóa đơn in", JOptionPane.YES_NO_OPTION);
+                    if (choice == JOptionPane.YES_OPTION) loadPaidReceipt(paidActor, invoice);
                 }
             }
         }.execute();
@@ -1679,15 +1875,17 @@ public final class PosFrame extends JFrame {
         for (String line : receipt.lines()) text.append(line + "\n");
         JScrollPane scroll = new JScrollPane(text);
         scroll.setPreferredSize(DialogActions.PREVIEW_TEXT);
-        if (DialogActions.confirm(this, scroll, "Xem trước hóa đơn"))
-            exportReceiptPdf(receipt);
+        Object[] choices = {"In", "Xuất PDF", "Đóng"};
+        int choice = JOptionPane.showOptionDialog(this, scroll, "Xem trước hóa đơn — thanh toán đã thành công",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, choices, choices[2]);
+        if (choice == 0) ReceiptPrinting.print(this, receipt);
+        else if (choice == 1) exportReceiptPdf(receipt);
     }
 
     private void exportReceiptPdf(final ReceiptPrintable receipt) {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Lưu hóa đơn PDF");
-        String invoiceId = receipt.lines().size() > 3
-                ? receipt.lines().get(3).replace("HÓA ĐƠN ", "") : "hoa-don";
+        String invoiceId = receipt.invoiceId();
         chooser.setSelectedFile(new File("hoa-don-" + invoiceId + ".pdf"));
         if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION)
             return;
@@ -1710,7 +1908,7 @@ public final class PosFrame extends JFrame {
                             "Đã lưu hóa đơn PDF:\n" + target.getAbsolutePath(),
                             "Xuất hóa đơn thành công", JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception exception) {
-                    showServiceError("Xuất hóa đơn PDF không thành công", exception);
+                    showServiceError("Thanh toán đã thành công; xuất PDF thất bại. Có thể thử lại từ danh sách hóa đơn.", exception);
                 }
             }
         }.execute();
@@ -1761,6 +1959,7 @@ public final class PosFrame extends JFrame {
             }
 
             private void refreshIfValid() {
+                invalidateQuote(saleState);
                 String value = field.getText().trim();
                 if (value.isEmpty()) {
                     debounce.restart();
@@ -1768,12 +1967,12 @@ public final class PosFrame extends JFrame {
                 }
                 try {
                     if (integer)
-                        Long.parseLong(value.replaceAll("[.,\\s]", ""));
+                        Long.parseLong(value);
                     else
                         new BigDecimal(value.replaceAll("[.\\s]", ""));
                     debounce.restart();
                 } catch (NumberFormatException ignored) {
-                    // Keep the last valid quote while the user is entering a number.
+                    // The visible quote is invalid until the input is valid again.
                 }
             }
         });

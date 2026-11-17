@@ -35,7 +35,6 @@ import java.util.Set;
 public class SaleService {
   public static final String KHACH_LE = "KH000";
   private static final BigDecimal HUNDRED = new BigDecimal("100");
-  private static final long DIEM_SU_DUNG_BUOC = 1000;
   private static final int MAX_CHECKOUT_ATTEMPTS = 3;
   private final SanPhamDAO sanPhamDAO = new SanPhamDAO();
   private final KhachHangDAO khachHangDAO = new KhachHangDAO();
@@ -47,14 +46,61 @@ public class SaleService {
 
   public BaoGia baoGia(Actor actor, YeuCauThanhToan request) throws SQLException {
     Access.actor(actor);
-    request.setMaNhanVien(actor.getMaNhanVien());
-    return baoGia(request);
+    if (request == null) throw new IllegalArgumentException("Thiếu yêu cầu thanh toán");
+    YeuCauThanhToan snapshot = request.copy();
+    snapshot.setMaNhanVien(actor.getMaNhanVien());
+    return baoGia(snapshot);
+  }
+
+  public String maHoaDonTiepTheo(Actor actor) throws SQLException {
+    Access.actor(actor);
+    try (SessionTransaction transaction = new SessionTransaction(actor, false, false)) {
+      String id = dao.IdDAO.next("HD", transaction.connection());
+      transaction.commit();
+      return id;
+    }
   }
 
   public HoaDon thanhToan(Actor actor, YeuCauThanhToan request) throws SQLException {
     Access.actor(actor);
-    request.setMaNhanVien(actor.getMaNhanVien());
-    return thanhToan(request);
+    if (request == null) throw new IllegalArgumentException("Thiếu yêu cầu thanh toán");
+    YeuCauThanhToan snapshot;
+    synchronized (request) {
+      String invoiceId = Access.blankToNull(request.getMaHoaDon());
+      request.setMaHoaDon(invoiceId == null ? maHoaDonTiepTheo(actor) : invoiceId);
+      snapshot = request.copy();
+    }
+    validateInvoiceId(snapshot.getMaHoaDon());
+    snapshot.setMaNhanVien(actor.getMaNhanVien());
+    String fingerprint = CheckoutFingerprint.of(actor, snapshot);
+    boolean outcomeUncertain = false;
+    for (int attempt = 1;; attempt++) {
+      try {
+        return checkout(actor, snapshot, fingerprint);
+      } catch (SQLException exception) {
+        boolean uncertain = outcomeUncertain || connectionFailure(exception);
+        outcomeUncertain = uncertain;
+        if (attempt >= MAX_CHECKOUT_ATTEMPTS || (!uncertain && !transientFailure(exception))) {
+          if (uncertain) throw new CheckoutOutcomeUnknownException(snapshot.getMaHoaDon(), exception);
+          throw exception;
+        }
+      } catch (RuntimeException exception) {
+        if (outcomeUncertain)
+          throw new CheckoutOutcomeUnknownException(snapshot.getMaHoaDon(), new SQLException(exception));
+        throw exception;
+      }
+    }
+  }
+
+  private void validateInvoiceId(String id) {
+    if (!ValidationRules.matches(id, ValidationRules.INVOICE_ID))
+      throw new IllegalArgumentException("Mã hóa đơn phải là HD và đúng 13 chữ số (ví dụ: HD0000000000001)");
+  }
+
+  private boolean connectionFailure(SQLException exception) {
+    for (SQLException error = exception; error != null; error = error.getNextException())
+      if (error.getSQLState() != null && error.getSQLState().startsWith("08")) return true;
+    return false;
   }
 
   public List<KhuyenMai> activePromotions(Actor actor, Set<String> productIds, LocalDateTime at)
@@ -88,7 +134,7 @@ public class SaleService {
   public void huyHoaDon(Actor actor, String maHoaDon, String lyDo, String tenDangNhapQuanLy,
       char[] matKhauQuanLy) throws SQLException {
     Access.manager(actor);
-    huyHoaDon(maHoaDon, lyDo, tenDangNhapQuanLy, matKhauQuanLy);
+    huyHoaDonInternal(actor, maHoaDon, lyDo, tenDangNhapQuanLy, matKhauQuanLy);
   }
 
   public List<HoaDon> timHoaDon(Actor actor, String keyword, String maNhanVien, String trangThai)
@@ -131,48 +177,41 @@ public class SaleService {
     }
   }
 
-  private HoaDon thanhToan(YeuCauThanhToan request) throws SQLException {
-    for (int attempt = 1;; attempt++) {
+  private HoaDon checkout(Actor actor, YeuCauThanhToan request, String fingerprint) throws SQLException {
+    try (SessionTransaction transaction = new SessionTransaction(actor, false, false)) {
+      Connection connection = transaction.connection();
+      Access.lock(connection, "POS_CHECKOUT_" + request.getMaHoaDon(), "Exclusive");
+      HoaDon existing = hoaDonDAO.repeatedCheckout(request.getMaHoaDon(), actor.getTenDangNhap(),
+          fingerprint, connection);
+      if (existing != null) {
+        transaction.commit();
+        return existing;
+      }
+      HoaDon hoaDon = tinh(request, connection, true, true);
+      hoaDonDAO.save(hoaDon, connection, actor.getTenDangNhap(), fingerprint);
+      for (PhanBoXuatLo allocation : hoaDon.getPhanBo())
+        loTonKhoDAO.change(allocation.getMaLo(), -allocation.getSoLuongXuat(), connection);
+      if (hoaDon.getMaKhachHang() != null)
+        khachHangDAO.updatePoints(hoaDon.getMaKhachHang(),
+            hoaDon.getDiemThuongKiem() - hoaDon.getDiemSuDung(), hoaDon.getDiemTichLuyKiem(), connection);
       try {
-        return checkout(request);
+        transaction.commit();
       } catch (SQLException exception) {
-        if (attempt >= MAX_CHECKOUT_ATTEMPTS || !transientFailure(exception))
-          throw exception;
+        // A failed commit response can follow a successful database commit. Never allocate a new ID.
+        throw new CheckoutOutcomeUnknownException(request.getMaHoaDon(), exception);
       }
+      return hoaDon;
     }
   }
 
-  private HoaDon checkout(YeuCauThanhToan request) throws SQLException {
-    try (Connection connection = DBConnection.open()) {
-      connection.setAutoCommit(false);
-      try {
-        HoaDon hoaDon = tinh(request, connection, true, true);
-        hoaDonDAO.save(hoaDon, connection);
-        for (PhanBoXuatLo allocation : hoaDon.getPhanBo())
-          loTonKhoDAO.change(allocation.getMaLo(), -allocation.getSoLuongXuat(), connection);
-        if (hoaDon.getMaKhachHang() != null && !KHACH_LE.equals(hoaDon.getMaKhachHang()))
-          khachHangDAO.updatePoints(hoaDon.getMaKhachHang(),
-              hoaDon.getDiemThuongKiem() - hoaDon.getDiemSuDung(), hoaDon.getDiemTichLuyKiem(),
-              connection);
-        connection.commit();
-        return hoaDon;
-      } catch (RuntimeException | SQLException exception) {
-        connection.rollback();
-        throw exception;
-      } finally {
-        connection.setAutoCommit(true);
-      }
-    }
-  }
-
-  private void huyHoaDon(String maHoaDon, String lyDo, String tenDangNhapQuanLy,
+  private void huyHoaDonInternal(Actor actor, String maHoaDon, String lyDo, String tenDangNhapQuanLy,
       char[] matKhauQuanLy) throws SQLException {
     if (!valid(maHoaDon) || maHoaDon.trim().length() > 30)
       throw new IllegalArgumentException("Mã hóa đơn không hợp lệ");
     if (lyDo == null || lyDo.trim().isEmpty() || lyDo.trim().length() > 255)
       throw new IllegalArgumentException("Lý do hủy phải từ 1 đến 255 ký tự");
-    try (Connection connection = DBConnection.open()) {
-      connection.setAutoCommit(false);
+    try (SessionTransaction transaction = new SessionTransaction(actor, true, false)) {
+      Connection connection = transaction.connection();
       try {
         entity.TaiKhoan manager =
             authService.xacThucQuanLy(tenDangNhapQuanLy, matKhauQuanLy, connection);
@@ -186,12 +225,10 @@ public class SaleService {
         if (hoaDon.getMaKhachHang() != null && !KHACH_LE.equals(hoaDon.getMaKhachHang()))
           khachHangDAO.updatePoints(hoaDon.getMaKhachHang(), hoaDon.getDiemSuDung(), 0, connection);
         hoaDonDAO.cancel(maHoaDon, manager.getMaNhanVien(), lyDo.trim(), connection);
-        connection.commit();
+        transaction.commit();
       } catch (RuntimeException | SQLException exception) {
         connection.rollback();
         throw exception;
-      } finally {
-        connection.setAutoCommit(true);
       }
     }
   }
@@ -232,11 +269,8 @@ public class SaleService {
       throw new IllegalArgumentException("Hóa đơn phải có hàng");
     HoaDon hoaDon = new HoaDon();
     String requestedInvoiceId = Access.blankToNull(request.getMaHoaDon());
-    if (requestedInvoiceId != null
-        && (!ValidationRules.matches(requestedInvoiceId, ValidationRules.INVOICE_ID)
-            || requestedInvoiceId.length() > 20))
-      throw new IllegalArgumentException("Mã hóa đơn sai định dạng, phải có dạng HD + số (ví dụ: HD001)");
-    hoaDon.setMaHoaDon(requestedInvoiceId == null ? "HD" + System.currentTimeMillis() : requestedInvoiceId);
+    if (requestedInvoiceId != null) validateInvoiceId(requestedInvoiceId);
+    hoaDon.setMaHoaDon(requestedInvoiceId);
     hoaDon.setMaNhanVien(request.getMaNhanVien());
     String maKhachHang = emptyToNull(request.getMaKhachHang());
     if (KHACH_LE.equals(maKhachHang))
@@ -293,15 +327,18 @@ public class SaleService {
     hoaDon.setLoaiGiamGia(discountType);
     hoaDon.setTyLeGiam(rate);
     BigDecimal eligibleBase = BigDecimal.ZERO;
+    int eligibleLines = 0;
     for (ChiTietHoaDon detail : hoaDon.getChiTiet()) {
       boolean eligible = LoaiGiamGia.HANG_THANH_VIEN.name().equals(discountType)
           || (LoaiGiamGia.KHUYEN_MAI.name().equals(discountType)
               && (PhamViKhuyenMai.TOAN_DON.name().equals(promotion.getPhamVi())
                   || promotion.getMaSanPham().contains(detail.getMaSanPham())));
-      if (eligible)
+      if (eligible) {
         eligibleBase = eligibleBase.add(detail.getThanhTien());
+        eligibleLines++;
+      }
     }
-    if (LoaiGiamGia.KHUYEN_MAI.name().equals(discountType) && eligibleBase.signum() == 0)
+    if (LoaiGiamGia.KHUYEN_MAI.name().equals(discountType) && eligibleLines == 0)
       throw new IllegalArgumentException("Khuyến mãi không áp dụng cho giỏ hàng");
     if (LoaiGiamGia.KHUYEN_MAI.name().equals(discountType)
         && PhamViKhuyenMai.TOAN_DON.name().equals(promotion.getPhamVi())
@@ -310,7 +347,7 @@ public class SaleService {
       throw new IllegalArgumentException("Đơn chưa đạt giá trị tối thiểu " + promotion.getDonToiThieu()
           + " của khuyến mãi " + promotion.getMaKhuyenMai());
     BigDecimal discount =
-        money(eligibleBase.multiply(rate).divide(HUNDRED, 2, RoundingMode.HALF_UP));
+        eligibleBase.multiply(rate).divide(HUNDRED, 0, RoundingMode.HALF_UP);
     BigDecimal allocated = BigDecimal.ZERO;
     for (ChiTietHoaDon detail : hoaDon.getChiTiet()) {
       boolean eligible = LoaiGiamGia.HANG_THANH_VIEN.name().equals(discountType)
@@ -338,19 +375,18 @@ public class SaleService {
     hoaDon.setTienGiam(discount);
     long used = request.getDiemThuongSuDung();
     BigDecimal afterDiscount = original.subtract(discount);
-    if (used < 0 || used % DIEM_SU_DUNG_BUOC != 0
+    if (used < 0
         || BigDecimal.valueOf(used).compareTo(afterDiscount) > 0
         || (lock && customer != null && used > customer.getDiemHienCo())
         || (used > 0 && customer == null && lock))
-      throw new IllegalArgumentException("Điểm thưởng không hợp lệ, phải là bội số của "
-          + DIEM_SU_DUNG_BUOC + " và không vượt quá số dư");
+      throw new IllegalArgumentException("Điểm thưởng phải là số nguyên không âm, không vượt số dư hoặc tiền sau giảm giá");
     hoaDon.setDiemSuDung(used);
     hoaDon.setTienGiamDiem(BigDecimal.valueOf(used));
     CauHinhCuaHang config = cauHinhDAO.get(connection);
     BigDecimal taxable = afterDiscount.subtract(BigDecimal.valueOf(used)).max(BigDecimal.ZERO);
     BigDecimal vatRate = config.getTyLeVat();
     hoaDon.setTyLeVat(vatRate);
-    hoaDon.setTienVat(money(taxable.multiply(vatRate).divide(HUNDRED, 2, RoundingMode.HALF_UP)));
+    hoaDon.setTienVat(taxable.multiply(vatRate).divide(HUNDRED, 0, RoundingMode.HALF_UP));
     hoaDon.setTongThanhToan(taxable.add(hoaDon.getTienVat()));
     hoaDon.setDiemTichLuyKiem(customer == null ? 0 : original.longValueExact());
     hoaDon.setDiemThuongKiem(customer == null ? 0
@@ -422,9 +458,6 @@ public class SaleService {
         : points >= 200000   ? new BigDecimal("5")
         : points >= 50000    ? new BigDecimal("3")
                              : BigDecimal.ZERO;
-  }
-  private BigDecimal money(BigDecimal value) {
-    return value.setScale(0, RoundingMode.HALF_UP);
   }
   private boolean transientFailure(SQLException error) {
     for (SQLException e = error; e != null; e = e.getNextException()) {

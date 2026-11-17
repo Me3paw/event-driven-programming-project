@@ -46,18 +46,7 @@ public class LoaiSanPhamDAO {
     return values;
   }
   public String nextId(Connection connection) throws SQLException {
-    try (PreparedStatement s =
-             connection.prepareStatement("SELECT MAX(ma_loai) FROM LOAI_SAN_PHAM")) {
-      try (ResultSet r = s.executeQuery()) {
-        int next = 1;
-        if (r.next()) {
-          String max = r.getString(1);
-          if (max != null && max.matches("LSP[0-9]+"))
-            next = Integer.parseInt(max.substring(3)) + 1;
-        }
-        return String.format("LSP%03d", next);
-      }
-    }
+    return IdDAO.next("LSP", connection);
   }
   public void delete(String maLoai, Connection connection) throws SQLException {
     try (PreparedStatement s =

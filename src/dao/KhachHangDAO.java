@@ -88,17 +88,7 @@ public class KhachHangDAO {
     return values;
   }
   public String nextId(Connection c) throws SQLException {
-    try (PreparedStatement s = c.prepareStatement("SELECT MAX(ma_khach_hang) FROM KHACH_HANG")) {
-      try (ResultSet r = s.executeQuery()) {
-        int next = 1;
-        if (r.next()) {
-          String max = r.getString(1);
-          if (max != null && max.matches("KH[0-9]{3}"))
-            next = Integer.parseInt(max.substring(2)) + 1;
-        }
-        return String.format("KH%03d", next);
-      }
-    }
+    return IdDAO.next("KH", c);
   }
   public void updatePoints(String maKhachHang, long rewardDelta, long loyaltyDelta, Connection c)
       throws SQLException {

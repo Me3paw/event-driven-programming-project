@@ -1,6 +1,7 @@
 package graphicUI;
 
 import components.ReceiptPrintable;
+import components.ReceiptPrinting;
 import components.ReceiptPdfExporter;
 import components.DialogActions;
 import components.FormValidator;
@@ -81,7 +82,8 @@ public final class InvoicePanel extends JPanel {
         addFilter(bar, "Đến ngày", to);
         addButton(bar, "Tìm", new Runnable() { @Override public void run() { load(); } });
         addButton(bar, "Chi tiết", new Runnable() { @Override public void run() { detail(); } });
-        addButton(bar, "In", new Runnable() { @Override public void run() { print(); } });
+        addButton(bar, "In", new Runnable() { @Override public void run() { print(false); } });
+        addButton(bar, "Xuất PDF", new Runnable() { @Override public void run() { print(true); } });
         if (actor.isQuanLy()) addButton(bar, "Hủy", new Runnable() { @Override public void run() { cancel(); } });
         add(bar, BorderLayout.NORTH);
         add(new JScrollPane(table), BorderLayout.CENTER);
@@ -265,7 +267,7 @@ public final class InvoicePanel extends JPanel {
         panel.add(new JLabel(value == null ? "" : String.valueOf(value)));
     }
 
-    private void print() {
+    private void print(final boolean pdf) {
         HoaDon selected = selectedInvoice();
         if (selected == null) {
             showError("Hãy chọn hóa đơn.");
@@ -289,9 +291,10 @@ public final class InvoicePanel extends JPanel {
                     for (String line : receipt.lines()) preview.append(line + "\n");
                     JScrollPane scroll = new JScrollPane(preview);
                     scroll.setPreferredSize(DialogActions.PREVIEW_TEXT);
-                    if (DialogActions.confirm(InvoicePanel.this, scroll,
-                            "Xem trước hóa đơn"))
-                        exportPdf(receipt, invoiceId);
+                    if (DialogActions.confirm(InvoicePanel.this, scroll, "Xem trước hóa đơn")) {
+                        if (pdf) exportPdf(receipt, invoiceId);
+                        else ReceiptPrinting.print(InvoicePanel.this, receipt);
+                    }
                 } catch (Exception exception) {
                     showError("Không tải được hóa đơn để in.", exception);
                 }

@@ -221,23 +221,31 @@ public final class PurchasePanel extends JPanel {
             message("Chỉ sửa được phiếu nháp.");
             return;
         }
-        new SwingWorker<Object[], Void>() {
+        new SwingWorker<PurchaseEditorData, Void>() {
             @Override
-            @SuppressWarnings("unchecked")
-            protected Object[] doInBackground() throws Exception {
-                return new Object[] {new PurchaseService().chiTiet(actor, purchaseId),
-                        new MasterDataService().timNhaCungCap(actor, null, null)};
+            protected PurchaseEditorData doInBackground() throws Exception {
+                return new PurchaseEditorData(new PurchaseService().chiTiet(actor, purchaseId),
+                        new MasterDataService().timNhaCungCap(actor, null, null));
             }
             @Override
             protected void done() {
                 try {
-                    Object[] result = get();
-                    editDraft((PhieuNhap) result[0], null, (List<NhaCungCap>) result[1]);
+                    PurchaseEditorData result = get();
+                    editDraft(result.purchase, null, result.suppliers);
                 } catch (Exception exception) {
                     message("Không tải được chi tiết phiếu nhập.", exception);
                 }
             }
         }.execute();
+    }
+
+    private static final class PurchaseEditorData {
+        private final PhieuNhap purchase;
+        private final List<NhaCungCap> suppliers;
+        private PurchaseEditorData(PhieuNhap purchase, List<NhaCungCap> suppliers) {
+            this.purchase = purchase;
+            this.suppliers = suppliers;
+        }
     }
 
     private void editDraft(PhieuNhap purchase, String generatedId, List<NhaCungCap> suppliers) {
@@ -423,7 +431,7 @@ public final class PurchasePanel extends JPanel {
             if (text.isEmpty())
                 return null;
             try {
-                return new BigDecimal(text).signum() > 0 ? null : "Đơn giá nhập phải lớn hơn 0.";
+                return new BigDecimal(text).signum() >= 0 ? null : "Đơn giá nhập không được âm.";
             } catch (NumberFormatException exception) {
                 return null;
             }
