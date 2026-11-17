@@ -72,15 +72,15 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
-import service.AuthService;
-import service.Actor;
+import service.DichVuDangNhap;
+import service.NguoiDung;
 import service.BaoGia;
 import service.DongThanhToan;
-import service.SaleService;
+import service.DichVuBanHang;
 import service.ThongKeCa;
 import service.YeuCauThanhToan;
-import service.SettingsService;
-import service.MasterDataService;
+import service.DichVuCauHinh;
+import service.DichVuDanhMuc;
 
 @SuppressWarnings("serial")
 public final class PosFrame extends JFrame {
@@ -91,7 +91,7 @@ public final class PosFrame extends JFrame {
     private final JLabel title = new JLabel();
     private final JLabel status = new JLabel("Sẵn sàng.");
     private String role = CASHIER;
-    private Actor actor;
+    private NguoiDung actor;
     private JButton selectedNavigation;
 
     private final java.util.Map<String, SaleUiState> savedSales = new java.util.HashMap<String, SaleUiState>();
@@ -123,7 +123,7 @@ public final class PosFrame extends JFrame {
         @Override public boolean getScrollableTracksViewportHeight() { return false; }
     }
 
-    private void invalidateQuote(SaleUiState state) {
+    private void huyBaoGia(SaleUiState state) {
         if (state == null || state.applyingQuote) return;
         state.revision++;
         state.quoted = false;
@@ -131,10 +131,10 @@ public final class PosFrame extends JFrame {
         if (state.btnThanhToan != null && state.pending == null) state.btnThanhToan.setEnabled(false);
     }
 
-    private void setSaleLocked(SaleUiState state, boolean locked) {
+    private void khoaBanHang(SaleUiState state, boolean locked) {
         if (state.locked != locked) {
             state.locked = locked;
-            if (locked) saveEnabled(state.panel, state);
+            if (locked) luuTrangThaiKichHoat(state.panel, state);
             else {
                 for (java.util.Map.Entry<Component, Boolean> entry : state.enabled.entrySet())
                     entry.getKey().setEnabled(entry.getValue().booleanValue());
@@ -147,19 +147,19 @@ public final class PosFrame extends JFrame {
         }
     }
 
-    private void saveEnabled(Component component, SaleUiState state) {
+    private void luuTrangThaiKichHoat(Component component, SaleUiState state) {
         state.enabled.put(component, Boolean.valueOf(component.isEnabled()));
         component.setEnabled(false);
         if (component instanceof java.awt.Container)
-            for (Component child : ((java.awt.Container) component).getComponents()) saveEnabled(child, state);
+            for (Component child : ((java.awt.Container) component).getComponents()) luuTrangThaiKichHoat(child, state);
     }
 
-    private void sessionExpired(Actor expired) {
+    private void hetPhienDangNhap(NguoiDung expired) {
         if (actor != expired) return;
-        if (saleState != null) { invalidateQuote(saleState); saleState.promotionRevision++; }
+        if (saleState != null) { huyBaoGia(saleState); saleState.promotionRevision++; }
         actor = null;
         role = CASHIER;
-        showLogin();
+        hienDangNhap();
         revalidate();
         repaint();
         JOptionPane.showMessageDialog(this,
@@ -172,10 +172,10 @@ public final class PosFrame extends JFrame {
         setMinimumSize(new Dimension(1024, 680));
         setSize(1280, 780);
         setLocationByPlatform(true);
-        showLogin();
+        hienDangNhap();
     }
 
-    private void showLogin() {
+    private void hienDangNhap() {
         JPanel root = new JPanel(new GridLayout(1, 2));
         JPanel intro = new JPanel(new BorderLayout(0, 18));
         intro.setBackground(UiTheme.NAVY);
@@ -225,10 +225,10 @@ public final class PosFrame extends JFrame {
                     return;
                 }
                 login.setEnabled(false);
-                new SwingWorker<Actor, Void>() {
+                new SwingWorker<NguoiDung, Void>() {
                     @Override
-                    protected Actor doInBackground() throws Exception {
-                        return new AuthService().dangNhapActor(loginName, loginPassword);
+                    protected NguoiDung doInBackground() throws Exception {
+                        return new DichVuDangNhap().dangNhapNguoiDung(loginName, loginPassword);
                     }
                     @Override
                     protected void done() {
@@ -237,18 +237,18 @@ public final class PosFrame extends JFrame {
                         password.setText("");
                         try {
                             actor = get();
-                            final Actor loggedIn = actor;
-                            loggedIn.onInvalidated(() -> javax.swing.SwingUtilities.invokeLater(() -> sessionExpired(loggedIn)));
+                            final NguoiDung loggedIn = actor;
+                            loggedIn.onInvalidated(() -> javax.swing.SwingUtilities.invokeLater(() -> hetPhienDangNhap(loggedIn)));
                             saleState = savedSales.computeIfAbsent(actor.getTenDangNhap(), key -> new SaleUiState());
-                            invalidateQuote(saleState);
+                            huyBaoGia(saleState);
                             role = actor.getVaiTro();
                             showShell();
                         } catch (Exception exception) {
-                            showLoginError(exception);
+                            baoLoiDangNhap(exception);
                         }
                     }
 
-                    private void showLoginError(Exception exception) {
+                    private void baoLoiDangNhap(Exception exception) {
                         Throwable cause = exception;
                         while (cause.getCause() != null
                                 && (cause instanceof java.util.concurrent.ExecutionException
@@ -336,7 +336,7 @@ public final class PosFrame extends JFrame {
         JPanel account = new JPanel();
         account.setOpaque(false);
         account.setLayout(new BoxLayout(account, BoxLayout.Y_AXIS));
-        JLabel user = new JLabel(displayUser());
+        JLabel user = new JLabel(tenNguoiDung());
         user.setForeground(Color.WHITE);
         user.setAlignmentX(Component.LEFT_ALIGNMENT);
         account.add(user);
@@ -347,7 +347,7 @@ public final class PosFrame extends JFrame {
         changePassword.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent event) {
-                changePassword();
+                doiMatKhau();
             }
         });
         account.add(changePassword);
@@ -359,10 +359,10 @@ public final class PosFrame extends JFrame {
             @Override
             public void actionPerformed(ActionEvent event) {
                 if (saleState != null && saleState.busy) return;
-                invalidateQuote(saleState);
+                huyBaoGia(saleState);
                 actor = null;
                 role = CASHIER;
-                showLogin();
+                hienDangNhap();
                 revalidate();
                 repaint();
             }
@@ -415,27 +415,27 @@ public final class PosFrame extends JFrame {
     private void addPages() {
         pages.removeAll();
         pages.add(dashboard(), "dashboard");
-        pages.add(saleState.panel == null ? sale() : saleState.panel, "sale");
+        pages.add(saleState.panel == null ? trangBanHang() : saleState.panel, "sale");
         if (saleState.refresh != null) saleState.refresh.run();
-        pages.add(new CustomerPanel(actor), "customers");
-        pages.add(new ProductPanel(actor, MANAGER.equals(role)), "products");
-        pages.add(new CategoryPanel(actor, MANAGER.equals(role)), "categories");
-        pages.add(new InventoryPanel(actor), "stock");
-        pages.add(new InvoicePanel(actor), "invoices");
+        pages.add(new KhachHangPanel(actor), "customers");
+        pages.add(new SanPhamPanel(actor, MANAGER.equals(role)), "products");
+        pages.add(new LoaiSanPhamPanel(actor, MANAGER.equals(role)), "categories");
+        pages.add(new TonKhoPanel(actor), "stock");
+        pages.add(new HoaDonPanel(actor), "invoices");
         if (MANAGER.equals(role)) {
-            pages.add(new StaffPanel(actor), "staff");
-            pages.add(new AccountPanel(actor), "accounts");
-            pages.add(new SupplierPanel(actor), "suppliers");
-            pages.add(new PurchasePanel(actor), "purchases");
-            pages.add(new InventoryPanel(actor, true), "adjustments");
-            pages.add(new PromotionPanel(actor), "promotions");
-            pages.add(settings(), "settings");
+            pages.add(new NhanVienPanel(actor), "staff");
+            pages.add(new TaiKhoanPanel(actor), "accounts");
+            pages.add(new NhaCungCapPanel(actor), "suppliers");
+            pages.add(new PhieuNhapPanel(actor), "purchases");
+            pages.add(new TonKhoPanel(actor, true), "adjustments");
+            pages.add(new KhuyenMaiPanel(actor), "promotions");
+            pages.add(trangCauHinh(), "settings");
         }
     }
 
     private JPanel dashboard() {
         if (MANAGER.equals(role))
-            return new ReportPanel(actor);
+            return new ThongKePanel(actor);
         JPanel panel = page();
         JPanel stats = new JPanel(new GridLayout(1, 5, 12, 0));
         stats.setOpaque(false);
@@ -458,7 +458,7 @@ public final class PosFrame extends JFrame {
         new SwingWorker<ThongKeCa, Void>() {
             @Override
             protected ThongKeCa doInBackground() throws Exception {
-                return new SaleService().thongKeCa(actor);
+                return new DichVuBanHang().thongKeCa(actor);
             }
             @Override
             protected void done() {
@@ -481,7 +481,7 @@ public final class PosFrame extends JFrame {
         return panel;
     }
 
-    private void changePassword() {
+    private void doiMatKhau() {
         if (actor == null)
             return;
         final JPasswordField current = new JPasswordField();
@@ -524,7 +524,7 @@ public final class PosFrame extends JFrame {
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                new AuthService().doiMatKhau(actor, oldPassword, newPassword);
+                new DichVuDangNhap().doiMatKhau(actor, oldPassword, newPassword);
                 return null;
             }
 
@@ -544,7 +544,7 @@ public final class PosFrame extends JFrame {
         }.execute();
     }
 
-    private String displayUser() {
+    private String tenNguoiDung() {
         if (actor == null)
             return "";
         String name = actor.getTenNhanVien();
@@ -603,71 +603,71 @@ public final class PosFrame extends JFrame {
         return button;
     }
 
-    private JPanel sale() {
+    private JPanel trangBanHang() {
         final SaleUiState state = saleState;
         JPanel panel = page();
         state.panel = panel;
-        final DefaultTableModel cart =
+        final DefaultTableModel gioHang =
                 new DefaultTableModel(new String[] {"Mã", "Sản phẩm", "SL", "Đơn giá", "Giảm dòng", "Thành tiền", "Thao tác"}, 0) {
                     @Override
                     public boolean isCellEditable(int row, int column) {
                         return false;
                     }
                 };
-        cartStates.put(cart, state);
-        final JComboBox<SanPham> products = new JComboBox<SanPham>();
-        final JComboBox<KhachHang> customers = new JComboBox<KhachHang>();
-        final JComboBox<KhuyenMai> promotions = new JComboBox<KhuyenMai>();
-        products.setRenderer(productRenderer());
-        products.setPreferredSize(new Dimension(170, products.getPreferredSize().height));
-        customers.setRenderer(customerRenderer());
-        customers.setPreferredSize(new Dimension(170, customers.getPreferredSize().height));
-        customers.addItem(null);
-        promotions.setRenderer(promotionRenderer());
-        promotions.getAccessibleContext().setAccessibleName("Khuyến mãi áp dụng");
+        cartStates.put(gioHang, state);
+        final JComboBox<SanPham> dsSanPham = new JComboBox<SanPham>();
+        final JComboBox<KhachHang> dsKhachHang = new JComboBox<KhachHang>();
+        final JComboBox<KhuyenMai> dsKhuyenMai = new JComboBox<KhuyenMai>();
+        dsSanPham.setRenderer(rendererSanPham());
+        dsSanPham.setPreferredSize(new Dimension(170, dsSanPham.getPreferredSize().height));
+        dsKhachHang.setRenderer(rendererKhachHang());
+        dsKhachHang.setPreferredSize(new Dimension(170, dsKhachHang.getPreferredSize().height));
+        dsKhachHang.addItem(null);
+        dsKhuyenMai.setRenderer(rendererKhuyenMai());
+        dsKhuyenMai.getAccessibleContext().setAccessibleName("Khuyến mãi áp dụng");
 
         JPanel productForm = new JPanel(new GridBagLayout());
         productForm.setOpaque(false);
-        final JTextField product = new JTextField();
-        final JSpinner quantity = new JSpinner(new SpinnerNumberModel(1, 1, 9999, 1));
+        final JTextField sanPham = new JTextField();
+        final JSpinner soLuong = new JSpinner(new SpinnerNumberModel(1, 1, 9999, 1));
         JLabel productLabel = posLabel("Mã / tên sản phẩm");
-        productLabel.setLabelFor(product);
+        productLabel.setLabelFor(sanPham);
         productLabel.setDisplayedMnemonic(KeyEvent.VK_M);
         place(productForm, productLabel, 0, 0, 0, GridBagConstraints.NONE);
-        product.setPreferredSize(new Dimension(130, product.getPreferredSize().height));
-        placeWest(productForm, product, 1, 0);
-        product.getAccessibleContext().setAccessibleName("Mã hoặc tên sản phẩm");
-        product.setToolTipText("Gõ để tìm ngay — kết quả tự hiện trong danh sách");
-        final Timer productSearch = new Timer(300,
-                event -> findProducts(product.getText().trim(), products, false, product));
-        productSearch.setRepeats(false);
-        product.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent event) { productSearch.restart(); }
-            @Override public void removeUpdate(DocumentEvent event) { productSearch.restart(); }
-            @Override public void changedUpdate(DocumentEvent event) { productSearch.restart(); }
+        sanPham.setPreferredSize(new Dimension(130, sanPham.getPreferredSize().height));
+        placeWest(productForm, sanPham, 1, 0);
+        sanPham.getAccessibleContext().setAccessibleName("Mã hoặc tên sản phẩm");
+        sanPham.setToolTipText("Gõ để tìm ngay — kết quả tự hiện trong danh sách");
+        final Timer timKiemSanPham = new Timer(300,
+                event -> timSanPham(sanPham.getText().trim(), dsSanPham, false, sanPham));
+        timKiemSanPham.setRepeats(false);
+        sanPham.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent event) { timKiemSanPham.restart(); }
+            @Override public void removeUpdate(DocumentEvent event) { timKiemSanPham.restart(); }
+            @Override public void changedUpdate(DocumentEvent event) { timKiemSanPham.restart(); }
         });
-        products.getAccessibleContext().setAccessibleName("Sản phẩm tìm được");
-        place(productForm, products, 2, 0, 1.0, GridBagConstraints.HORIZONTAL);
+        dsSanPham.getAccessibleContext().setAccessibleName("Sản phẩm tìm được");
+        place(productForm, dsSanPham, 2, 0, 1.0, GridBagConstraints.HORIZONTAL);
         JLabel quantityLabel = posLabel("Số lượng");
-        quantityLabel.setLabelFor(quantity);
+        quantityLabel.setLabelFor(soLuong);
         quantityLabel.setDisplayedMnemonic(KeyEvent.VK_S);
         place(productForm, quantityLabel, 0, 1, 0, GridBagConstraints.NONE);
-        placeWest(productForm, quantity, 1, 1);
-        quantity.getAccessibleContext().setAccessibleName("Số lượng sản phẩm");
-        final JRadioButton noDiscount = new JRadioButton("Không giảm", true);
-        final JRadioButton tierDiscount = new JRadioButton("Giảm hạng");
-        final JRadioButton eventDiscount = new JRadioButton("Khuyến mãi sự kiện");
+        placeWest(productForm, soLuong, 1, 1);
+        soLuong.getAccessibleContext().setAccessibleName("Số lượng sản phẩm");
+        final JRadioButton khongGiamGia = new JRadioButton("Không giảm", true);
+        final JRadioButton giamTheoHang = new JRadioButton("Giảm hạng");
+        final JRadioButton giamKhuyenMai = new JRadioButton("Khuyến mãi sự kiện");
         ButtonGroup discounts = new ButtonGroup();
-        discounts.add(noDiscount);
-        discounts.add(tierDiscount);
-        discounts.add(eventDiscount);
-        final JTextField rewards = new JTextField("0", 6);
-        final JComboBox<String> method = new JComboBox<String>(new String[] {"TIEN_MAT", "THE", "QR"});
+        discounts.add(khongGiamGia);
+        discounts.add(giamTheoHang);
+        discounts.add(giamKhuyenMai);
+        final JTextField diemThuong = new JTextField("0", 6);
+        final JComboBox<String> phuongThuc = new JComboBox<String>(new String[] {"TIEN_MAT", "THE", "QR"});
         final JComboBox<String> result = new JComboBox<String>(new String[] {"THÀNH CÔNG", "THẤT BẠI"});
-        final JTextField tender = new JTextField(10);
-        final JLabel subtotal = new JLabel("0"), discount = new JLabel("0"),
-                     reward = new JLabel("0"), vat = new JLabel("0"), total = new JLabel("0"),
-                     change = new JLabel("0");
+        final JTextField tienKhachDua = new JTextField(10);
+        final JLabel tamTinh = new JLabel("0"), tienGiam = new JLabel("0"),
+                     tienGiamDiem = new JLabel("0"), vat = new JLabel("0"), tongThanhToan = new JLabel("0"),
+                     tienThua = new JLabel("0");
         JButton add = new JButton("Thêm vào giỏ");
         add.setMnemonic(KeyEvent.VK_A);
         add.setBackground(UiTheme.BLUE);
@@ -681,31 +681,31 @@ public final class PosFrame extends JFrame {
             @Override
             public void actionPerformed(ActionEvent event) {
                 if (state.locked || state.busy) return;
-                final SanPham selected = (SanPham) products.getSelectedItem();
+                final SanPham selected = (SanPham) dsSanPham.getSelectedItem();
                 if (selected == null) {
                     JOptionPane.showMessageDialog(PosFrame.this, "Tìm và chọn sản phẩm đang kinh doanh.");
                     return;
                 }
-                final int amount = ((Number) quantity.getValue()).intValue();
-                final java.util.Map<String, Integer> needed = cartQuantities(cart);
+                final int amount = ((Number) soLuong.getValue()).intValue();
+                final java.util.Map<String, Integer> needed = cartQuantities(gioHang);
                 final Integer previous = needed.get(selected.getMaSanPham());
                 needed.put(selected.getMaSanPham(), Integer.valueOf((previous == null ? 0 : previous.intValue()) + amount));
-                checkStock(needed, new Runnable() {
+                kiemTraTonKho(needed, new Runnable() {
                     @Override
                     public void run() {
                         if (state.locked || state.busy) return;
-                        addCartLine(cart, selected, amount);
-                        product.setText("");
+                        themDongGioHang(gioHang, selected, amount);
+                        sanPham.setText("");
                         status.setText(previous == null
                                 ? "Đã thêm " + selected.getTenSanPham() + " vào giỏ."
                                 : selected.getTenSanPham() + " đã có trong giỏ — đã cộng dồn số lượng.");
-                        refreshQuote(cart, customers, promotions, noDiscount, tierDiscount, eventDiscount,
-                                rewards, method, tender, result, subtotal, discount, reward, vat, total, change);
-                        loadPromotions(cart, promotions, new Runnable() {
+                        capNhatBaoGia(gioHang, dsKhachHang, dsKhuyenMai, khongGiamGia, giamTheoHang, giamKhuyenMai,
+                                diemThuong, phuongThuc, tienKhachDua, result, tamTinh, tienGiam, tienGiamDiem, vat, tongThanhToan, tienThua);
+                        taiKhuyenMai(gioHang, dsKhuyenMai, new Runnable() {
                             @Override
                             public void run() {
-                                refreshQuote(cart, customers, promotions, noDiscount, tierDiscount, eventDiscount,
-                                        rewards, method, tender, result, subtotal, discount, reward, vat, total, change);
+                                capNhatBaoGia(gioHang, dsKhachHang, dsKhuyenMai, khongGiamGia, giamTheoHang, giamKhuyenMai,
+                                        diemThuong, phuongThuc, tienKhachDua, result, tamTinh, tienGiam, tienGiamDiem, vat, tongThanhToan, tienThua);
                             }
                         });
                     }
@@ -722,40 +722,40 @@ public final class PosFrame extends JFrame {
         productForm.add(add, addConstraints);
         productForm.removeAll();
         place(productForm, productLabel, 0, 0, 1.0, GridBagConstraints.HORIZONTAL);
-        place(productForm, product, 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
-        place(productForm, products, 0, 2, 1.0, GridBagConstraints.HORIZONTAL);
+        place(productForm, sanPham, 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
+        place(productForm, dsSanPham, 0, 2, 1.0, GridBagConstraints.HORIZONTAL);
         place(productForm, quantityLabel, 0, 3, 1.0, GridBagConstraints.HORIZONTAL);
-        place(productForm, quantity, 0, 4, 1.0, GridBagConstraints.HORIZONTAL);
+        place(productForm, soLuong, 0, 4, 1.0, GridBagConstraints.HORIZONTAL);
         place(productForm, add, 0, 5, 1.0, GridBagConstraints.HORIZONTAL);
         JPanel addCard = titledCard("Thêm sản phẩm", productForm);
 
         final Runnable refreshQuoteAction = new Runnable() {
             @Override
             public void run() {
-                refreshQuote(cart, customers, promotions, noDiscount, tierDiscount, eventDiscount,
-                        rewards, method, tender, result, subtotal, discount, reward, vat, total, change);
+                capNhatBaoGia(gioHang, dsKhachHang, dsKhuyenMai, khongGiamGia, giamTheoHang, giamKhuyenMai,
+                        diemThuong, phuongThuc, tienKhachDua, result, tamTinh, tienGiam, tienGiamDiem, vat, tongThanhToan, tienThua);
             }
         };
         final Runnable syncRewards = new Runnable() {
             @Override
             public void run() {
-                boolean hasCustomer = customers.getSelectedItem() != null;
+                boolean hasCustomer = dsKhachHang.getSelectedItem() != null;
                 if (!hasCustomer)
-                    rewards.setText("0");
+                    diemThuong.setText("0");
             }
         };
-        final Runnable customerChanged = new Runnable() {
+        final Runnable khachHangThayDoi = new Runnable() {
             @Override
             public void run() {
                 syncRewards.run();
                 refreshQuoteAction.run();
             }
         };
-        final Runnable afterCartChange = new Runnable() {
+        final Runnable sauKhiDoiGioHang = new Runnable() {
             @Override
             public void run() {
                 refreshQuoteAction.run();
-                loadPromotions(cart, promotions, new Runnable() {
+                taiKhuyenMai(gioHang, dsKhuyenMai, new Runnable() {
                     @Override
                     public void run() {
                         refreshQuoteAction.run();
@@ -766,36 +766,36 @@ public final class PosFrame extends JFrame {
 
         JPanel customerForm = new JPanel(new GridBagLayout());
         customerForm.setOpaque(false);
-        final JTextField customer = new JTextField();
-        final JLabel loyalty = new JLabel("Khách lẻ · không dùng điểm");
-        loyalty.setForeground(UiTheme.MUTED);
+        final JTextField khachHang = new JTextField();
+        final JLabel lblDiemThanhVien = new JLabel("Khách lẻ · không dùng điểm");
+        lblDiemThanhVien.setForeground(UiTheme.MUTED);
         JLabel customerLabel = posLabel("Tìm khách hàng");
-        customerLabel.setLabelFor(customer);
+        customerLabel.setLabelFor(khachHang);
         customerLabel.setDisplayedMnemonic(KeyEvent.VK_K);
         place(customerForm, customerLabel, 0, 0, 0, GridBagConstraints.NONE);
-        customer.setPreferredSize(new Dimension(150, customer.getPreferredSize().height));
-        placeWest(customerForm, customer, 1, 0);
-        customer.getAccessibleContext().setAccessibleName("Mã hoặc tên khách hàng");
-        customer.setToolTipText("Gõ để tìm ngay — kết quả tự hiện trong danh sách");
-        final Timer customerSearch = new Timer(300,
-                event -> findCustomers(customer.getText().trim(), customers, loyalty, customerChanged, customer));
-        customerSearch.setRepeats(false);
-        customer.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent event) { customerSearch.restart(); }
-            @Override public void removeUpdate(DocumentEvent event) { customerSearch.restart(); }
-            @Override public void changedUpdate(DocumentEvent event) { customerSearch.restart(); }
+        khachHang.setPreferredSize(new Dimension(150, khachHang.getPreferredSize().height));
+        placeWest(customerForm, khachHang, 1, 0);
+        khachHang.getAccessibleContext().setAccessibleName("Mã hoặc tên khách hàng");
+        khachHang.setToolTipText("Gõ để tìm ngay — kết quả tự hiện trong danh sách");
+        final Timer timKiemKhachHang = new Timer(300,
+                event -> timKhachHang(khachHang.getText().trim(), dsKhachHang, lblDiemThanhVien, khachHangThayDoi, khachHang));
+        timKiemKhachHang.setRepeats(false);
+        khachHang.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent event) { timKiemKhachHang.restart(); }
+            @Override public void removeUpdate(DocumentEvent event) { timKiemKhachHang.restart(); }
+            @Override public void changedUpdate(DocumentEvent event) { timKiemKhachHang.restart(); }
         });
-        customers.addActionListener(new ActionListener() {
+        dsKhachHang.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent event) {
-                showLoyalty((KhachHang) customers.getSelectedItem(), loyalty);
+                hienDiemThanhVien((KhachHang) dsKhachHang.getSelectedItem(), lblDiemThanhVien);
                 syncRewards.run();
-                refreshQuote(cart, customers, promotions, noDiscount, tierDiscount, eventDiscount,
-                        rewards, method, tender, result, subtotal, discount, reward, vat, total, change);
+                capNhatBaoGia(gioHang, dsKhachHang, dsKhuyenMai, khongGiamGia, giamTheoHang, giamKhuyenMai,
+                        diemThuong, phuongThuc, tienKhachDua, result, tamTinh, tienGiam, tienGiamDiem, vat, tongThanhToan, tienThua);
             }
         });
-        customers.getAccessibleContext().setAccessibleName("Khách hàng tìm được");
-        place(customerForm, customers, 2, 0, 1.0, GridBagConstraints.HORIZONTAL);
+        dsKhachHang.getAccessibleContext().setAccessibleName("Khách hàng tìm được");
+        place(customerForm, dsKhachHang, 2, 0, 1.0, GridBagConstraints.HORIZONTAL);
         GridBagConstraints loyaltyConstraints = new GridBagConstraints();
         loyaltyConstraints.gridx = 1;
         loyaltyConstraints.gridy = 1;
@@ -804,15 +804,15 @@ public final class PosFrame extends JFrame {
         loyaltyConstraints.fill = GridBagConstraints.HORIZONTAL;
         loyaltyConstraints.anchor = GridBagConstraints.WEST;
         loyaltyConstraints.insets = new Insets(2, 4, 2, 4);
-        customerForm.add(loyalty, loyaltyConstraints);
+        customerForm.add(lblDiemThanhVien, loyaltyConstraints);
         customerForm.removeAll();
         place(customerForm, customerLabel, 0, 0, 1.0, GridBagConstraints.HORIZONTAL);
-        place(customerForm, customer, 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
-        place(customerForm, customers, 0, 2, 1.0, GridBagConstraints.HORIZONTAL);
-        place(customerForm, loyalty, 0, 3, 1.0, GridBagConstraints.HORIZONTAL);
+        place(customerForm, khachHang, 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
+        place(customerForm, dsKhachHang, 0, 2, 1.0, GridBagConstraints.HORIZONTAL);
+        place(customerForm, lblDiemThanhVien, 0, 3, 1.0, GridBagConstraints.HORIZONTAL);
         JPanel customerCard = titledCard("Thông tin khách hàng", customerForm);
         syncRewards.run();
-        findProducts("", products, false);
+        timSanPham("", dsSanPham, false);
 
         JPanel promoBox = new JPanel(new GridBagLayout());
         promoBox.setOpaque(false);
@@ -827,29 +827,29 @@ public final class PosFrame extends JFrame {
         segGroup.add(segEvent);
         segNone.setSelected(true);
         segNone.addActionListener(new ActionListener() {
-            @Override public void actionPerformed(ActionEvent event) { noDiscount.doClick(); }
+            @Override public void actionPerformed(ActionEvent event) { khongGiamGia.doClick(); }
         });
         segTier.addActionListener(new ActionListener() {
-            @Override public void actionPerformed(ActionEvent event) { tierDiscount.doClick(); }
+            @Override public void actionPerformed(ActionEvent event) { giamTheoHang.doClick(); }
         });
         segEvent.addActionListener(new ActionListener() {
-            @Override public void actionPerformed(ActionEvent event) { eventDiscount.doClick(); }
+            @Override public void actionPerformed(ActionEvent event) { giamKhuyenMai.doClick(); }
         });
         segRow.add(segNone);
         segRow.add(segTier);
         segRow.add(segEvent);
         place(promoBox, segRow, 1, 0, 1.0, GridBagConstraints.HORIZONTAL);
-        place(promoBox, promotions, 1, 1, 1.0, GridBagConstraints.HORIZONTAL);
+        place(promoBox, dsKhuyenMai, 1, 1, 1.0, GridBagConstraints.HORIZONTAL);
         JLabel rewardsLabel = posLabel("Điểm dùng");
-        rewardsLabel.setLabelFor(rewards);
+        rewardsLabel.setLabelFor(diemThuong);
         rewardsLabel.setDisplayedMnemonic(KeyEvent.VK_D);
-        rewards.getAccessibleContext().setAccessibleName("Điểm thưởng sử dụng");
+        diemThuong.getAccessibleContext().setAccessibleName("Điểm thưởng sử dụng");
         place(promoBox, rewardsLabel, 0, 2, 0, GridBagConstraints.NONE);
-        placeWest(promoBox, rewards, 1, 2);
+        placeWest(promoBox, diemThuong, 1, 2);
         JLabel rewardsError = fieldError();
         place(promoBox, rewardsError, 1, 3, 1.0, GridBagConstraints.HORIZONTAL);
-        validateOnBlur(rewards, rewardsError, () -> {
-            String text = rewards.getText().trim();
+        validateOnBlur(diemThuong, rewardsError, () -> {
+            String text = diemThuong.getText().trim();
             if (text.isEmpty())
                 return null;
             try {
@@ -861,28 +861,28 @@ public final class PosFrame extends JFrame {
         JPanel promoCard = titledCard("Khuyến mãi", promoBox);
 
         JLabel methodLabel = posLabel("Phương thức");
-        methodLabel.setLabelFor(method);
+        methodLabel.setLabelFor(phuongThuc);
         methodLabel.setDisplayedMnemonic(KeyEvent.VK_P);
-        method.getAccessibleContext().setAccessibleName("Phương thức thanh toán");
+        phuongThuc.getAccessibleContext().setAccessibleName("Phương thức thanh toán");
         JLabel tenderLabel = posLabel("Tiền khách đưa");
-        tenderLabel.setLabelFor(tender);
+        tenderLabel.setLabelFor(tienKhachDua);
         tenderLabel.setDisplayedMnemonic(KeyEvent.VK_I);
-        tender.getAccessibleContext().setAccessibleName("Tiền khách đưa");
+        tienKhachDua.getAccessibleContext().setAccessibleName("Tiền khách đưa");
         JPanel payFields = new JPanel(new GridBagLayout());
         payFields.setOpaque(false);
         place(payFields, methodLabel, 0, 0, 0, GridBagConstraints.NONE);
-        place(payFields, method, 1, 0, 1.0, GridBagConstraints.HORIZONTAL);
+        place(payFields, phuongThuc, 1, 0, 1.0, GridBagConstraints.HORIZONTAL);
         JLabel resultLabel = posLabel("Kết quả");
         resultLabel.setLabelFor(result);
         result.getAccessibleContext().setAccessibleName("Kết quả thanh toán điện tử");
         place(payFields, resultLabel, 0, 1, 0, GridBagConstraints.NONE);
         place(payFields, result, 1, 1, 1.0, GridBagConstraints.HORIZONTAL);
         place(payFields, tenderLabel, 0, 2, 0, GridBagConstraints.NONE);
-        place(payFields, tender, 1, 2, 1.0, GridBagConstraints.HORIZONTAL);
+        place(payFields, tienKhachDua, 1, 2, 1.0, GridBagConstraints.HORIZONTAL);
         JLabel tenderError = fieldError();
         place(payFields, tenderError, 1, 3, 1.0, GridBagConstraints.HORIZONTAL);
-        validateOnBlur(tender, tenderError, () -> {
-            String text = tender.getText().trim();
+        validateOnBlur(tienKhachDua, tenderError, () -> {
+            String text = tienKhachDua.getText().trim();
             if (text.isEmpty())
                 return null;
             try {
@@ -891,42 +891,42 @@ public final class PosFrame extends JFrame {
                 return "Tiền khách đưa phải là số.";
             }
         });
-        JButton checkout = new JButton("Thanh toán");
-        state.btnThanhToan = checkout;
-        state.lblTongThanhToan = total;
-        checkout.setBackground(UiTheme.BLUE);
-        checkout.setForeground(Color.WHITE);
-        checkout.setOpaque(true);
-        checkout.setBorderPainted(false);
-        checkout.setFocusPainted(false);
-        checkout.setFont(checkout.getFont().deriveFont(Font.BOLD, 16f));
-        checkout.setMargin(new Insets(8, 0, 8, 0));
-        checkout.setEnabled(false);
-        checkout.setToolTipText("Giỏ hàng đang trống — hãy thêm sản phẩm");
-        checkout.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submitCheckout");
-        checkout.getActionMap().put("submitCheckout", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent event) { checkout.doClick(); }
+        JButton btnThanhToan = new JButton("Thanh toán");
+        state.btnThanhToan = btnThanhToan;
+        state.lblTongThanhToan = tongThanhToan;
+        btnThanhToan.setBackground(UiTheme.BLUE);
+        btnThanhToan.setForeground(Color.WHITE);
+        btnThanhToan.setOpaque(true);
+        btnThanhToan.setBorderPainted(false);
+        btnThanhToan.setFocusPainted(false);
+        btnThanhToan.setFont(btnThanhToan.getFont().deriveFont(Font.BOLD, 16f));
+        btnThanhToan.setMargin(new Insets(8, 0, 8, 0));
+        btnThanhToan.setEnabled(false);
+        btnThanhToan.setToolTipText("Giỏ hàng đang trống — hãy thêm sản phẩm");
+        btnThanhToan.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submitCheckout");
+        btnThanhToan.getActionMap().put("submitCheckout", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) { btnThanhToan.doClick(); }
         });
-        checkout.addActionListener(event -> {
+        btnThanhToan.addActionListener(event -> {
             if (state.busy || actor == null || actor.isInvalid()) return;
-            YeuCauThanhToan request = state.pending;
-            if (request == null) {
-                request = paymentRequest(cart, (KhachHang) customers.getSelectedItem(),
-                        (KhuyenMai) promotions.getSelectedItem(), tierDiscount.isSelected(), eventDiscount.isSelected(),
-                        rewards.getText().trim(), String.valueOf(method.getSelectedItem()), tender.getText().trim(),
+            YeuCauThanhToan yeuCau = state.pending;
+            if (yeuCau == null) {
+                yeuCau = yeuCauThanhToan(gioHang, (KhachHang) dsKhachHang.getSelectedItem(),
+                        (KhuyenMai) dsKhuyenMai.getSelectedItem(), giamTheoHang.isSelected(), giamKhuyenMai.isSelected(),
+                        diemThuong.getText().trim(), String.valueOf(phuongThuc.getSelectedItem()), tienKhachDua.getText().trim(),
                         "THÀNH CÔNG".equals(result.getSelectedItem()));
-                if (request == null) return;
+                if (yeuCau == null) return;
                 state.busy = true;
-                setSaleLocked(state, true);
+                khoaBanHang(state, true);
                 if (JOptionPane.showConfirmDialog(PosFrame.this, "Xác nhận thanh toán?", "Thanh toán",
                         JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
                     state.busy = false;
-                    setSaleLocked(state, false);
+                    khoaBanHang(state, false);
                     return;
                 }
             }
-            checkout(request, cart, product, products, quantity, customer, customers, promotions, noDiscount,
-                    rewards, tender, method, result, subtotal, discount, reward, vat, total, change, loyalty);
+            thanhToan(yeuCau, gioHang, sanPham, dsSanPham, soLuong, khachHang, dsKhachHang, dsKhuyenMai, khongGiamGia,
+                    diemThuong, tienKhachDua, phuongThuc, result, tamTinh, tienGiam, tienGiamDiem, vat, tongThanhToan, tienThua, lblDiemThanhVien);
         });
         JPanel payBody = new JPanel(new BorderLayout(0, 8));
         payBody.setOpaque(false);
@@ -937,38 +937,38 @@ public final class PosFrame extends JFrame {
         final Runnable refresh = new Runnable() {
             @Override
             public void run() {
-                refreshQuote(cart, customers, promotions, noDiscount, tierDiscount, eventDiscount,
-                        rewards, method, tender, result, subtotal, discount, reward, vat, total, change);
+                capNhatBaoGia(gioHang, dsKhachHang, dsKhuyenMai, khongGiamGia, giamTheoHang, giamKhuyenMai,
+                        diemThuong, phuongThuc, tienKhachDua, result, tamTinh, tienGiam, tienGiamDiem, vat, tongThanhToan, tienThua);
             }
         };
-        noDiscount.addActionListener(new ActionListener() {
+        khongGiamGia.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent event) {
                 segNone.setSelected(true);
                 refresh.run();
             }
         });
-        tierDiscount.addActionListener(new ActionListener() {
+        giamTheoHang.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent event) {
                 segTier.setSelected(true);
                 refresh.run();
             }
         });
-        eventDiscount.addActionListener(new ActionListener() {
+        giamKhuyenMai.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent event) {
                 segEvent.setSelected(true);
                 refresh.run();
             }
         });
-        promotions.addActionListener(new ActionListener() {
+        dsKhuyenMai.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent event) {
                 refresh.run();
             }
         });
-        method.addActionListener(new ActionListener() {
+        phuongThuc.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent event) {
                 refresh.run();
@@ -980,21 +980,21 @@ public final class PosFrame extends JFrame {
                 refresh.run();
             }
         });
-        addQuoteRefreshListener(rewards, refresh, true);
-        addQuoteRefreshListener(tender, refresh, false);
-        total.setFont(total.getFont().deriveFont(Font.BOLD, 18f));
-        total.setForeground(UiTheme.BLUE);
+        themListenerCapNhatBaoGia(diemThuong, refresh, true);
+        themListenerCapNhatBaoGia(tienKhachDua, refresh, false);
+        tongThanhToan.setFont(tongThanhToan.getFont().deriveFont(Font.BOLD, 18f));
+        tongThanhToan.setForeground(UiTheme.BLUE);
         JPanel totalsBox = new JPanel(new GridBagLayout());
         totalsBox.setOpaque(false);
-        place(totalsBox, moneyRow("Tạm tính", subtotal), 0, 0, 1.0, GridBagConstraints.HORIZONTAL);
-        place(totalsBox, moneyRow("Giảm giá", discount), 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
-        place(totalsBox, moneyRow("Điểm sử dụng", reward), 0, 2, 1.0, GridBagConstraints.HORIZONTAL);
+        place(totalsBox, moneyRow("Tạm tính", tamTinh), 0, 0, 1.0, GridBagConstraints.HORIZONTAL);
+        place(totalsBox, moneyRow("Giảm giá", tienGiam), 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
+        place(totalsBox, moneyRow("Điểm sử dụng", tienGiamDiem), 0, 2, 1.0, GridBagConstraints.HORIZONTAL);
         place(totalsBox, moneyRow("VAT", vat), 0, 3, 1.0, GridBagConstraints.HORIZONTAL);
-        place(totalsBox, totalRow(total), 0, 4, 1.0, GridBagConstraints.HORIZONTAL);
-        place(totalsBox, moneyRow("Tiền thừa", change), 0, 5, 1.0, GridBagConstraints.HORIZONTAL);
+        place(totalsBox, totalRow(tongThanhToan), 0, 4, 1.0, GridBagConstraints.HORIZONTAL);
+        place(totalsBox, moneyRow("Tiền thừa", tienThua), 0, 5, 1.0, GridBagConstraints.HORIZONTAL);
         JPanel totalsCard = titledCard("Tổng tiền", totalsBox);
 
-        JTable table = new JTable(cart);
+        JTable table = new JTable(gioHang);
         table.setRowHeight(30);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -1037,10 +1037,10 @@ public final class PosFrame extends JFrame {
                 table.setRowSelectionInterval(viewRow, viewRow);
                 Rectangle rect = table.getCellRect(viewRow, viewCol, false);
                 if (event.getX() - rect.x < rect.width / 2)
-                    editQuantity(cart, table, afterCartChange);
+                    suaSoLuong(gioHang, table, sauKhiDoiGioHang);
                 else {
-                    cart.removeRow(viewRow);
-                    afterCartChange.run();
+                    gioHang.removeRow(viewRow);
+                    sauKhiDoiGioHang.run();
                 }
             }
         });
@@ -1074,18 +1074,18 @@ public final class PosFrame extends JFrame {
         cartCard.add(cartHead, BorderLayout.NORTH);
         cartCard.add(tableArea, BorderLayout.CENTER);
 
-        cart.addTableModelListener(event -> {
-            boolean empty = cart.getRowCount() == 0;
+        gioHang.addTableModelListener(event -> {
+            boolean empty = gioHang.getRowCount() == 0;
             tableCards.show(tableArea, empty ? "empty" : "table");
-            summaryLabel.setText(cart.getRowCount() + " món");
+            summaryLabel.setText(gioHang.getRowCount() + " món");
             if (!state.applyingQuote && event.getColumn() != 4 && event.getColumn() != 5) {
-                invalidateQuote(state);
+                huyBaoGia(state);
                 if (empty) {
-                    for (JLabel label : new JLabel[] {subtotal, discount, reward, vat, total, change}) label.setText("0");
+                    for (JLabel label : new JLabel[] {tamTinh, tienGiam, tienGiamDiem, vat, tongThanhToan, tienThua}) label.setText("0");
                 }
             }
-            checkout.setEnabled(!state.busy && (state.pending != null || (!empty && state.quoted)));
-            checkout.setToolTipText(empty ? "Giỏ hàng đang trống — hãy thêm sản phẩm" : null);
+            btnThanhToan.setEnabled(!state.busy && (state.pending != null || (!empty && state.quoted)));
+            btnThanhToan.setToolTipText(empty ? "Giỏ hàng đang trống — hãy thêm sản phẩm" : null);
         });
 
         JPanel side = new ScrollableFields();
@@ -1105,7 +1105,7 @@ public final class PosFrame extends JFrame {
         JPanel paymentFooter = new JPanel(new BorderLayout(0, 6));
         paymentFooter.setOpaque(false);
         paymentFooter.add(totalsCard, BorderLayout.CENTER);
-        paymentFooter.add(checkout, BorderLayout.SOUTH);
+        paymentFooter.add(btnThanhToan, BorderLayout.SOUTH);
         rightWrap.add(paymentFooter, BorderLayout.SOUTH);
         rightWrap.setPreferredSize(new Dimension(390, 1));
         rightWrap.setMinimumSize(new Dimension(330, 1));
@@ -1259,7 +1259,7 @@ public final class PosFrame extends JFrame {
         return button;
     }
 
-    private JPanel settings() {
+    private JPanel trangCauHinh() {
         JPanel panel = page();
         JPanel form = new JPanel(new GridLayout(0, 1, 0, 10));
         form.setBackground(Color.WHITE);
@@ -1297,7 +1297,7 @@ public final class PosFrame extends JFrame {
         new SwingWorker<CauHinhCuaHang, Void>() {
             @Override
             protected CauHinhCuaHang doInBackground() throws Exception {
-                return new SettingsService().lay(actor);
+                return new DichVuCauHinh().lay(actor);
             }
             @Override
             protected void done() {
@@ -1327,7 +1327,7 @@ public final class PosFrame extends JFrame {
                 value.setDiaChi(address);
                 value.setSoDienThoai(phone);
                 value.setTyLeVat(rate);
-                new SettingsService().luu(actor, value);
+                new DichVuCauHinh().luu(actor, value);
                 return null;
             }
             @Override
@@ -1337,28 +1337,28 @@ public final class PosFrame extends JFrame {
                     get();
                     status.setText("Đã lưu cấu hình; VAT áp dụng giao dịch tương lai.");
                 } catch (Exception exception) {
-                    showServiceError("Không lưu được cấu hình", exception);
+                    baoLoiDichVu("Không lưu được cấu hình", exception);
                 }
             }
         }.execute();
     }
 
-    private DefaultListCellRenderer productRenderer() {
+    private DefaultListCellRenderer rendererSanPham() {
         return new DefaultListCellRenderer() {
             @Override
             public java.awt.Component getListCellRendererComponent(
                     JList<?> list, Object value, int index, boolean selected, boolean focus) {
                 super.getListCellRendererComponent(list, value, index, selected, focus);
                 if (value instanceof SanPham) {
-                    SanPham product = (SanPham) value;
-                    setText(product.getMaSanPham() + " · " + product.getTenSanPham() + " · " + product.getGiaBan());
+                    SanPham sanPham = (SanPham) value;
+                    setText(sanPham.getMaSanPham() + " · " + sanPham.getTenSanPham() + " · " + sanPham.getGiaBan());
                 }
                 return this;
             }
         };
     }
 
-    private DefaultListCellRenderer customerRenderer() {
+    private DefaultListCellRenderer rendererKhachHang() {
         return new DefaultListCellRenderer() {
             @Override
             public java.awt.Component getListCellRendererComponent(
@@ -1367,42 +1367,42 @@ public final class PosFrame extends JFrame {
                 if (value == null)
                     setText("Khách lẻ");
                 else if (value instanceof KhachHang) {
-                    KhachHang customer = (KhachHang) value;
-                    setText(customer.getMaKhachHang() + " · " + customer.getHoTen());
+                    KhachHang khachHang = (KhachHang) value;
+                    setText(khachHang.getMaKhachHang() + " · " + khachHang.getHoTen());
                 }
                 return this;
             }
         };
     }
 
-    private DefaultListCellRenderer promotionRenderer() {
+    private DefaultListCellRenderer rendererKhuyenMai() {
         return new DefaultListCellRenderer() {
             @Override
             public java.awt.Component getListCellRendererComponent(
                     JList<?> list, Object value, int index, boolean selected, boolean focus) {
                 super.getListCellRendererComponent(list, value, index, selected, focus);
                 if (value instanceof KhuyenMai) {
-                    KhuyenMai promotion = (KhuyenMai) value;
-                    setText(promotion.getMaKhuyenMai() + " · " + promotion.getTenKhuyenMai() + " · "
-                            + promotion.getTyLeGiam() + "%");
+                    KhuyenMai khuyenMai = (KhuyenMai) value;
+                    setText(khuyenMai.getMaKhuyenMai() + " · " + khuyenMai.getTenKhuyenMai() + " · "
+                            + khuyenMai.getTyLeGiam() + "%");
                 }
                 return this;
             }
         };
     }
 
-    private void findProducts(final String keyword, final JComboBox<SanPham> products, final boolean notify) {
-        findProducts(keyword, products, notify, null);
+    private void timSanPham(final String keyword, final JComboBox<SanPham> dsSanPham, final boolean notify) {
+        timSanPham(keyword, dsSanPham, notify, null);
     }
 
-    private void findProducts(final String keyword, final JComboBox<SanPham> products, final boolean notify,
+    private void timSanPham(final String keyword, final JComboBox<SanPham> dsSanPham, final boolean notify,
             final JTextField source) {
-        final Actor requestActor = actor;
+        final NguoiDung requestActor = actor;
         final SaleUiState requestState = saleState;
         new SwingWorker<List<SanPham>, Void>() {
             @Override
             protected List<SanPham> doInBackground() throws Exception {
-                return new MasterDataService().timSanPham(requestActor, keyword, null, "DANG_KINH_DOANH", null, null);
+                return new DichVuDanhMuc().timSanPham(requestActor, keyword, null, "DANG_KINH_DOANH", null, null);
             }
             @Override
             protected void done() {
@@ -1411,15 +1411,15 @@ public final class PosFrame extends JFrame {
                 try {
                     List<SanPham> found = get();
                     String previousKey = null;
-                    Object previous = products.getSelectedItem();
+                    Object previous = dsSanPham.getSelectedItem();
                     if (previous instanceof SanPham)
                         previousKey = ((SanPham) previous).getMaSanPham();
-                    products.removeAllItems();
-                    for (SanPham product : found) products.addItem(product);
+                    dsSanPham.removeAllItems();
+                    for (SanPham sanPham : found) dsSanPham.addItem(sanPham);
                     int select = -1;
                     if (previousKey != null) {
-                        for (int i = 0; i < products.getItemCount(); i++) {
-                            SanPham item = products.getItemAt(i);
+                        for (int i = 0; i < dsSanPham.getItemCount(); i++) {
+                            SanPham item = dsSanPham.getItemAt(i);
                             if (item != null && previousKey.equals(item.getMaSanPham())) {
                                 select = i;
                                 break;
@@ -1428,9 +1428,9 @@ public final class PosFrame extends JFrame {
                     }
                     if (select < 0)
                         select = found.isEmpty() ? -1 : 0;
-                    products.setSelectedIndex(select);
-                    if (source != null && !keyword.isEmpty() && products.getItemCount() > 0)
-                        products.setPopupVisible(true);
+                    dsSanPham.setSelectedIndex(select);
+                    if (source != null && !keyword.isEmpty() && dsSanPham.getItemCount() > 0)
+                        dsSanPham.setPopupVisible(true);
                     if (notify && found.isEmpty())
                         JOptionPane.showMessageDialog(PosFrame.this, "Không tìm thấy sản phẩm đang kinh doanh.");
                 } catch (Exception exception) {
@@ -1441,19 +1441,19 @@ public final class PosFrame extends JFrame {
         }.execute();
     }
 
-    private void findCustomers(final String keyword, final JComboBox<KhachHang> customers,
-            final JLabel loyalty, final Runnable afterLoad) {
-        findCustomers(keyword, customers, loyalty, afterLoad, null);
+    private void timKhachHang(final String keyword, final JComboBox<KhachHang> dsKhachHang,
+            final JLabel lblDiemThanhVien, final Runnable afterLoad) {
+        timKhachHang(keyword, dsKhachHang, lblDiemThanhVien, afterLoad, null);
     }
 
-    private void findCustomers(final String keyword, final JComboBox<KhachHang> customers,
-            final JLabel loyalty, final Runnable afterLoad, final JTextField source) {
-        final Actor requestActor = actor;
+    private void timKhachHang(final String keyword, final JComboBox<KhachHang> dsKhachHang,
+            final JLabel lblDiemThanhVien, final Runnable afterLoad, final JTextField source) {
+        final NguoiDung requestActor = actor;
         final SaleUiState requestState = saleState;
         new SwingWorker<List<KhachHang>, Void>() {
             @Override
             protected List<KhachHang> doInBackground() throws Exception {
-                return new MasterDataService().timKhachHang(requestActor, keyword, "HOAT_DONG");
+                return new DichVuDanhMuc().timKhachHang(requestActor, keyword, "HOAT_DONG");
             }
             @Override
             protected void done() {
@@ -1462,16 +1462,16 @@ public final class PosFrame extends JFrame {
                 try {
                     List<KhachHang> found = get();
                     String previousKey = null;
-                    Object previous = customers.getSelectedItem();
+                    Object previous = dsKhachHang.getSelectedItem();
                     if (previous instanceof KhachHang)
                         previousKey = ((KhachHang) previous).getMaKhachHang();
-                    customers.removeAllItems();
-                    customers.addItem(null);
-                    for (KhachHang customer : found) customers.addItem(customer);
+                    dsKhachHang.removeAllItems();
+                    dsKhachHang.addItem(null);
+                    for (KhachHang khachHang : found) dsKhachHang.addItem(khachHang);
                     int select = 0;
                     if (previousKey != null) {
-                        for (int i = 1; i < customers.getItemCount(); i++) {
-                            KhachHang item = customers.getItemAt(i);
+                        for (int i = 1; i < dsKhachHang.getItemCount(); i++) {
+                            KhachHang item = dsKhachHang.getItemAt(i);
                             if (item != null && previousKey.equals(item.getMaKhachHang())) {
                                 select = i;
                                 break;
@@ -1480,10 +1480,10 @@ public final class PosFrame extends JFrame {
                     } else if (found.size() == 1 || (keyword.length() > 0 && !found.isEmpty())) {
                         select = 1;
                     }
-                    customers.setSelectedIndex(select);
-                    if (source != null && !keyword.isEmpty() && customers.getItemCount() > 1)
-                        customers.setPopupVisible(true);
-                    showLoyalty((KhachHang) customers.getSelectedItem(), loyalty);
+                    dsKhachHang.setSelectedIndex(select);
+                    if (source != null && !keyword.isEmpty() && dsKhachHang.getItemCount() > 1)
+                        dsKhachHang.setPopupVisible(true);
+                    hienDiemThanhVien((KhachHang) dsKhachHang.getSelectedItem(), lblDiemThanhVien);
                     if (afterLoad != null) afterLoad.run();
                 } catch (Exception exception) {
                     JOptionPane.showMessageDialog(PosFrame.this, "Không tải được khách hàng.");
@@ -1492,52 +1492,52 @@ public final class PosFrame extends JFrame {
         }.execute();
     }
 
-    private static void showLoyalty(KhachHang customer, JLabel loyalty) {
-        if (customer == null) {
-            loyalty.setText("Khách lẻ · không dùng điểm");
+    private static void hienDiemThanhVien(KhachHang khachHang, JLabel lblDiemThanhVien) {
+        if (khachHang == null) {
+            lblDiemThanhVien.setText("Khách lẻ · không dùng điểm");
             return;
         }
-        long points = customer.getDiemTichLuy();
-        String tier = points >= 1000000 ? "Vàng 10%"
-                : points >= 200000      ? "Bạc 5%"
-                : points >= 50000       ? "Đồng 3%"
+        long diem = khachHang.getDiemTichLuy();
+        String hangThanhVien = diem >= 1000000 ? "Vàng 10%"
+                : diem >= 200000      ? "Bạc 5%"
+                : diem >= 50000       ? "Đồng 3%"
                                         : "Chưa xếp hạng 0%";
-        loyalty.setText("Hạng " + tier + " · điểm thưởng " + UiFormat.money(customer.getDiemHienCo()));
+        lblDiemThanhVien.setText("Hạng " + hangThanhVien + " · điểm thưởng " + UiFormat.money(khachHang.getDiemHienCo()));
     }
 
-    private void addCartLine(DefaultTableModel cart, SanPham product, int quantity) {
-        for (int row = 0; row < cart.getRowCount(); row++) {
-            if (product.getMaSanPham().equals(cart.getValueAt(row, 0))) {
-                int amount = ((Number) cart.getValueAt(row, 2)).intValue() + quantity;
-                cart.setValueAt(Integer.valueOf(amount), row, 2);
-                cart.setValueAt(product.getGiaBan().multiply(BigDecimal.valueOf(amount)), row, 5);
+    private void themDongGioHang(DefaultTableModel gioHang, SanPham sanPham, int soLuong) {
+        for (int row = 0; row < gioHang.getRowCount(); row++) {
+            if (sanPham.getMaSanPham().equals(gioHang.getValueAt(row, 0))) {
+                int amount = ((Number) gioHang.getValueAt(row, 2)).intValue() + soLuong;
+                gioHang.setValueAt(Integer.valueOf(amount), row, 2);
+                gioHang.setValueAt(sanPham.getGiaBan().multiply(BigDecimal.valueOf(amount)), row, 5);
                 return;
             }
         }
-        cart.addRow(new Object[] {product.getMaSanPham(), product.getTenSanPham(), Integer.valueOf(quantity),
-                product.getGiaBan(), BigDecimal.ZERO, product.getGiaBan().multiply(BigDecimal.valueOf(quantity))});
+        gioHang.addRow(new Object[] {sanPham.getMaSanPham(), sanPham.getTenSanPham(), Integer.valueOf(soLuong),
+                sanPham.getGiaBan(), BigDecimal.ZERO, sanPham.getGiaBan().multiply(BigDecimal.valueOf(soLuong))});
     }
 
-    private void editQuantity(DefaultTableModel cart, JTable table, final Runnable onApplied) {
+    private void suaSoLuong(DefaultTableModel gioHang, JTable table, final Runnable onApplied) {
         int row = table.getSelectedRow();
         if (row < 0)
             return;
-        JSpinner quantity =
-                new JSpinner(new SpinnerNumberModel(((Number) cart.getValueAt(row, 2)).intValue(), 1, 9999, 1));
-        if (JOptionPane.showConfirmDialog(this, quantity, "Số lượng", JOptionPane.OK_CANCEL_OPTION)
+        JSpinner soLuong =
+                new JSpinner(new SpinnerNumberModel(((Number) gioHang.getValueAt(row, 2)).intValue(), 1, 9999, 1));
+        if (JOptionPane.showConfirmDialog(this, soLuong, "Số lượng", JOptionPane.OK_CANCEL_OPTION)
                 != JOptionPane.OK_OPTION)
             return;
-        final int amount = ((Number) quantity.getValue()).intValue();
-        final String productId = String.valueOf(cart.getValueAt(row, 0));
-        final java.util.Map<String, Integer> needed = cartQuantities(cart);
-        needed.put(productId, Integer.valueOf(amount));
-        checkStock(needed, new Runnable() {
+        final int amount = ((Number) soLuong.getValue()).intValue();
+        final String maSanPham = String.valueOf(gioHang.getValueAt(row, 0));
+        final java.util.Map<String, Integer> needed = cartQuantities(gioHang);
+        needed.put(maSanPham, Integer.valueOf(amount));
+        kiemTraTonKho(needed, new Runnable() {
             @Override
             public void run() {
-                for (int r = 0; r < cart.getRowCount(); r++) {
-                    if (productId.equals(String.valueOf(cart.getValueAt(r, 0)))) {
-                        cart.setValueAt(Integer.valueOf(amount), r, 2);
-                        cart.setValueAt(((BigDecimal) cart.getValueAt(r, 3))
+                for (int r = 0; r < gioHang.getRowCount(); r++) {
+                    if (maSanPham.equals(String.valueOf(gioHang.getValueAt(r, 0)))) {
+                        gioHang.setValueAt(Integer.valueOf(amount), r, 2);
+                        gioHang.setValueAt(((BigDecimal) gioHang.getValueAt(r, 3))
                                 .multiply(BigDecimal.valueOf(amount)), r, 5);
                         break;
                     }
@@ -1548,25 +1548,25 @@ public final class PosFrame extends JFrame {
         });
     }
 
-    private java.util.Map<String, Integer> cartQuantities(DefaultTableModel cart) {
-        java.util.Map<String, Integer> quantities = new java.util.LinkedHashMap<String, Integer>();
-        for (int row = 0; row < cart.getRowCount(); row++) {
-            String id = String.valueOf(cart.getValueAt(row, 0));
-            int qty = ((Number) cart.getValueAt(row, 2)).intValue();
-            Integer current = quantities.get(id);
-            quantities.put(id, Integer.valueOf((current == null ? 0 : current.intValue()) + qty));
+    private java.util.Map<String, Integer> cartQuantities(DefaultTableModel gioHang) {
+        java.util.Map<String, Integer> soLuongTheoMa = new java.util.LinkedHashMap<String, Integer>();
+        for (int row = 0; row < gioHang.getRowCount(); row++) {
+            String id = String.valueOf(gioHang.getValueAt(row, 0));
+            int qty = ((Number) gioHang.getValueAt(row, 2)).intValue();
+            Integer current = soLuongTheoMa.get(id);
+            soLuongTheoMa.put(id, Integer.valueOf((current == null ? 0 : current.intValue()) + qty));
         }
-        return quantities;
+        return soLuongTheoMa;
     }
 
-    private void checkStock(final java.util.Map<String, Integer> needed, final Runnable onOk) {
-        final Actor requestActor = actor;
+    private void kiemTraTonKho(final java.util.Map<String, Integer> needed, final Runnable onOk) {
+        final NguoiDung requestActor = actor;
         final SaleUiState requestState = saleState;
         new SwingWorker<java.util.Map<String, Integer>, Void>() {
             @Override
             protected java.util.Map<String, Integer> doInBackground() throws Exception {
                 java.util.Map<String, Integer> shortage = new java.util.LinkedHashMap<String, Integer>();
-                SaleService sales = new SaleService();
+                DichVuBanHang sales = new DichVuBanHang();
                 for (java.util.Map.Entry<String, Integer> entry : needed.entrySet()) {
                     int available = sales.tonKho(requestActor, entry.getKey());
                     if (entry.getValue().intValue() > available)
@@ -1597,33 +1597,33 @@ public final class PosFrame extends JFrame {
         }.execute();
     }
 
-    private void loadPromotions(DefaultTableModel cart, final JComboBox<KhuyenMai> promotions,
+    private void taiKhuyenMai(DefaultTableModel gioHang, final JComboBox<KhuyenMai> dsKhuyenMai,
             final Runnable afterLoad) {
-        final SaleUiState state = cartStates.get(cart);
+        final SaleUiState state = cartStates.get(gioHang);
         if (state == null || state.locked || state != saleState || actor == null) return;
-        final Actor requestActor = actor;
+        final NguoiDung requestActor = actor;
         final long revision = ++state.promotionRevision;
-        final java.util.Map<String, Integer> quantities = cartQuantities(cart);
-        final java.util.Set<String> productIds = new LinkedHashSet<String>();
-        java.math.BigDecimal subtotal = java.math.BigDecimal.ZERO;
-        for (int row = 0; row < cart.getRowCount(); row++) {
-            productIds.add(String.valueOf(cart.getValueAt(row, 0)));
-            subtotal = subtotal.add(((java.math.BigDecimal) cart.getValueAt(row, 3))
-                    .multiply(java.math.BigDecimal.valueOf(((Number) cart.getValueAt(row, 2)).intValue())));
+        final java.util.Map<String, Integer> soLuongTheoMa = cartQuantities(gioHang);
+        final java.util.Set<String> dsMaSanPham = new LinkedHashSet<String>();
+        java.math.BigDecimal tamTinh = java.math.BigDecimal.ZERO;
+        for (int row = 0; row < gioHang.getRowCount(); row++) {
+            dsMaSanPham.add(String.valueOf(gioHang.getValueAt(row, 0)));
+            tamTinh = tamTinh.add(((java.math.BigDecimal) gioHang.getValueAt(row, 3))
+                    .multiply(java.math.BigDecimal.valueOf(((Number) gioHang.getValueAt(row, 2)).intValue())));
         }
-        final java.math.BigDecimal cartSubtotal = subtotal;
+        final java.math.BigDecimal tamTinhGioHang = tamTinh;
         new SwingWorker<List<KhuyenMai>, Void>() {
             @Override
             protected List<KhuyenMai> doInBackground() throws Exception {
-                return new SaleService().activePromotions(requestActor, productIds, cartSubtotal, LocalDateTime.now());
+                return new DichVuBanHang().khuyenMaiHieuLuc(requestActor, dsMaSanPham, tamTinhGioHang, LocalDateTime.now());
             }
             @Override
             protected void done() {
                 if (actor != requestActor || state != saleState || state.locked
-                        || state.promotionRevision != revision || !quantities.equals(cartQuantities(cart))) return;
+                        || state.promotionRevision != revision || !soLuongTheoMa.equals(cartQuantities(gioHang))) return;
                 try {
-                    promotions.removeAllItems();
-                    for (KhuyenMai promotion : get()) promotions.addItem(promotion);
+                    dsKhuyenMai.removeAllItems();
+                    for (KhuyenMai khuyenMai : get()) dsKhuyenMai.addItem(khuyenMai);
                     if (afterLoad != null)
                         afterLoad.run();
                 } catch (Exception exception) {
@@ -1633,62 +1633,62 @@ public final class PosFrame extends JFrame {
         }.execute();
     }
 
-    private YeuCauThanhToan paymentRequest(DefaultTableModel cart, KhachHang customer, KhuyenMai promotion,
-            boolean tier, boolean event, String rewards, String method, String tender, boolean electronicSuccess) {
-        return paymentRequest(cart, customer, promotion, tier, event, rewards, method, tender,
-                electronicSuccess, false);
+    private YeuCauThanhToan yeuCauThanhToan(DefaultTableModel gioHang, KhachHang khachHang, KhuyenMai khuyenMai,
+            boolean hangThanhVien, boolean event, String diemThuong, String phuongThuc, String tienKhachDua, boolean thanhToanDienTuThanhCong) {
+        return yeuCauThanhToan(gioHang, khachHang, khuyenMai, hangThanhVien, event, diemThuong, phuongThuc, tienKhachDua,
+                thanhToanDienTuThanhCong, false);
     }
 
-    private YeuCauThanhToan paymentRequest(DefaultTableModel cart, KhachHang customer, KhuyenMai promotion,
-            boolean tier, boolean event, String rewards, String method, String tender, boolean electronicSuccess,
+    private YeuCauThanhToan yeuCauThanhToan(DefaultTableModel gioHang, KhachHang khachHang, KhuyenMai khuyenMai,
+            boolean hangThanhVien, boolean event, String diemThuong, String phuongThuc, String tienKhachDua, boolean thanhToanDienTuThanhCong,
             boolean quiet) {
-        if (cart.getRowCount() == 0) {
+        if (gioHang.getRowCount() == 0) {
             if (!quiet)
                 JOptionPane.showMessageDialog(this, "Giỏ hàng chưa có sản phẩm.");
             return null;
         }
-        final long rewardPoints;
+        final long diemSuDung;
         try {
-            String digits = rewards.trim();
-            rewardPoints = Long.parseLong(digits.length() == 0 ? "0" : digits);
+            String digits = diemThuong.trim();
+            diemSuDung = Long.parseLong(digits.length() == 0 ? "0" : digits);
         } catch (NumberFormatException exception) {
             if (!quiet)
                 JOptionPane.showMessageDialog(this, "Điểm thưởng phải là số nguyên không âm.");
             return null;
         }
-        if (rewardPoints < 0) {
+        if (diemSuDung < 0) {
             if (!quiet)
                 JOptionPane.showMessageDialog(this, "Điểm thưởng phải là số nguyên không âm (1 điểm = 1đ).");
             return null;
         }
-        if (rewardPoints > 0) {
-            if (customer == null) {
+        if (diemSuDung > 0) {
+            if (khachHang == null) {
                 if (!quiet)
                     JOptionPane.showMessageDialog(this, "Khách lẻ không dùng điểm thưởng. Vui lòng chọn khách hàng.");
                 return null;
             }
-            if (rewardPoints > customer.getDiemHienCo()) {
+            if (diemSuDung > khachHang.getDiemHienCo()) {
                 if (!quiet)
                     JOptionPane.showMessageDialog(this, "Điểm thưởng vượt quá số dư (còn "
-                            + customer.getDiemHienCo() + " điểm).");
+                            + khachHang.getDiemHienCo() + " điểm).");
                 return null;
             }
         }
-        if ((tier && customer == null) || (event && promotion == null)) {
+        if ((hangThanhVien && khachHang == null) || (event && khuyenMai == null)) {
             if (!quiet)
                 JOptionPane.showMessageDialog(this, "Chọn giảm giá hợp lệ và khách hàng khi dùng hạng.");
             return null;
         }
-        YeuCauThanhToan request = new YeuCauThanhToan();
-        request.setMaKhachHang(customer == null ? SaleService.KHACH_LE : customer.getMaKhachHang());
-        request.setLoaiGiamGia(event ? "KHUYEN_MAI" : tier ? "HANG_THANH_VIEN" : "KHONG");
-        request.setMaKhuyenMai(event ? promotion.getMaKhuyenMai() : null);
-        request.setDiemThuongSuDung(rewardPoints);
-        request.setPhuongThucThanhToan(method);
-        if ("TIEN_MAT".equals(method)) {
-            if (tender != null && tender.trim().length() > 0) {
+        YeuCauThanhToan yeuCau = new YeuCauThanhToan();
+        yeuCau.setMaKhachHang(khachHang == null ? DichVuBanHang.KHACH_LE : khachHang.getMaKhachHang());
+        yeuCau.setLoaiGiamGia(event ? "KHUYEN_MAI" : hangThanhVien ? "HANG_THANH_VIEN" : "KHONG");
+        yeuCau.setMaKhuyenMai(event ? khuyenMai.getMaKhuyenMai() : null);
+        yeuCau.setDiemThuongSuDung(diemSuDung);
+        yeuCau.setPhuongThucThanhToan(phuongThuc);
+        if ("TIEN_MAT".equals(phuongThuc)) {
+            if (tienKhachDua != null && tienKhachDua.trim().length() > 0) {
                 try {
-                    request.setTienKhachDua(new BigDecimal(tender.replaceAll("[.\\s]", "")));
+                    yeuCau.setTienKhachDua(new BigDecimal(tienKhachDua.replaceAll("[.\\s]", "")));
                 } catch (NumberFormatException exception) {
                     if (!quiet)
                         JOptionPane.showMessageDialog(this, "Nhập tiền khách đưa hợp lệ.");
@@ -1696,74 +1696,74 @@ public final class PosFrame extends JFrame {
                 }
             }
         } else {
-            request.setThanhToanDienTuThanhCong(electronicSuccess);
-            request.setMaThamChieuThanhToan("MOCK-" + method + "-" + (electronicSuccess ? "OK" : "FAIL"));
+            yeuCau.setThanhToanDienTuThanhCong(thanhToanDienTuThanhCong);
+            yeuCau.setMaThamChieuThanhToan("MOCK-" + phuongThuc + "-" + (thanhToanDienTuThanhCong ? "OK" : "FAIL"));
         }
         List<DongThanhToan> lines = new ArrayList<DongThanhToan>();
-        for (int row = 0; row < cart.getRowCount(); row++) {
+        for (int row = 0; row < gioHang.getRowCount(); row++) {
             DongThanhToan line = new DongThanhToan();
-            line.setMaSanPham(String.valueOf(cart.getValueAt(row, 0)));
-            line.setSoLuong(((Number) cart.getValueAt(row, 2)).intValue());
+            line.setMaSanPham(String.valueOf(gioHang.getValueAt(row, 0)));
+            line.setSoLuong(((Number) gioHang.getValueAt(row, 2)).intValue());
             lines.add(line);
         }
-        request.setDongHang(lines);
-        return request;
+        yeuCau.setDongHang(lines);
+        return yeuCau;
     }
 
-    private void refreshQuote(DefaultTableModel cart, JComboBox<KhachHang> customers,
-            JComboBox<KhuyenMai> promotions, JRadioButton noDiscount, JRadioButton tierDiscount,
-            JRadioButton eventDiscount, JTextField rewards, JComboBox<String> method,
-            JTextField tender, JComboBox<String> result, JLabel subtotal, JLabel discount,
-            JLabel reward, JLabel vat, JLabel total, JLabel change) {
-        SaleUiState state = cartStates.get(cart);
+    private void capNhatBaoGia(DefaultTableModel gioHang, JComboBox<KhachHang> dsKhachHang,
+            JComboBox<KhuyenMai> dsKhuyenMai, JRadioButton khongGiamGia, JRadioButton giamTheoHang,
+            JRadioButton giamKhuyenMai, JTextField diemThuong, JComboBox<String> phuongThuc,
+            JTextField tienKhachDua, JComboBox<String> result, JLabel tamTinh, JLabel tienGiam,
+            JLabel tienGiamDiem, JLabel vat, JLabel tongThanhToan, JLabel tienThua) {
+        SaleUiState state = cartStates.get(gioHang);
         if (state == null || state.locked || actor == null || state != saleState) return;
-        invalidateQuote(state);
-        if (cart.getRowCount() == 0) { state.lblTongThanhToan.setText("0"); return; }
-        YeuCauThanhToan request = paymentRequest(cart, (KhachHang) customers.getSelectedItem(),
-                (KhuyenMai) promotions.getSelectedItem(), tierDiscount.isSelected(),
-                eventDiscount.isSelected(), rewards.getText().trim(),
-                String.valueOf(method.getSelectedItem()), tender.getText().trim(),
+        huyBaoGia(state);
+        if (gioHang.getRowCount() == 0) { state.lblTongThanhToan.setText("0"); return; }
+        YeuCauThanhToan yeuCau = yeuCauThanhToan(gioHang, (KhachHang) dsKhachHang.getSelectedItem(),
+                (KhuyenMai) dsKhuyenMai.getSelectedItem(), giamTheoHang.isSelected(),
+                giamKhuyenMai.isSelected(), diemThuong.getText().trim(),
+                String.valueOf(phuongThuc.getSelectedItem()), tienKhachDua.getText().trim(),
                 "THÀNH CÔNG".equals(result.getSelectedItem()), true);
-        if (request != null)
-            quote(request, cart, subtotal, discount, reward, vat, total, change);
+        if (yeuCau != null)
+            tinhBaoGia(yeuCau, gioHang, tamTinh, tienGiam, tienGiamDiem, vat, tongThanhToan, tienThua);
     }
 
-    private void quote(final YeuCauThanhToan request, final DefaultTableModel cart, final JLabel subtotal,
-            final JLabel discount, final JLabel reward, final JLabel vat, final JLabel total, final JLabel change) {
-        final SaleUiState state = cartStates.get(cart);
+    private void tinhBaoGia(final YeuCauThanhToan yeuCau, final DefaultTableModel gioHang, final JLabel tamTinh,
+            final JLabel tienGiam, final JLabel tienGiamDiem, final JLabel vat, final JLabel tongThanhToan, final JLabel tienThua) {
+        final SaleUiState state = cartStates.get(gioHang);
         final long revision = state.revision;
-        final Actor quotedActor = actor;
-        final YeuCauThanhToan snapshot = request.copy();
+        final NguoiDung quotedActor = actor;
+        final YeuCauThanhToan snapshot = yeuCau.copy();
         new SwingWorker<BaoGia, Void>() {
             @Override protected BaoGia doInBackground() throws Exception {
-                return new SaleService().baoGia(quotedActor, snapshot);
+                return new DichVuBanHang().baoGia(quotedActor, snapshot);
             }
             @Override protected void done() {
                 if (actor != quotedActor || state != saleState || state.revision != revision || state.locked) return;
                 try {
-                    HoaDon invoice = get().getHoaDon();
+                    HoaDon hoaDon = get().getHoaDon();
                     java.util.Map<String, entity.ChiTietHoaDon> details = new java.util.HashMap<String, entity.ChiTietHoaDon>();
-                    for (entity.ChiTietHoaDon detail : invoice.getChiTiet()) details.put(detail.getMaSanPham(), detail);
+                    for (entity.ChiTietHoaDon detail : hoaDon.getChiTiet()) details.put(detail.getMaSanPham(), detail);
                     state.applyingQuote = true;
                     try {
-                        for (int row = 0; row < cart.getRowCount(); row++) {
-                            entity.ChiTietHoaDon detail = details.get(String.valueOf(cart.getValueAt(row, 0)));
+                        for (int row = 0; row < gioHang.getRowCount(); row++) {
+                            entity.ChiTietHoaDon detail = details.get(String.valueOf(gioHang.getValueAt(row, 0)));
                             if (detail == null) return;
-                            cart.setValueAt(detail.getTienGiamDong(), row, 4);
-                            cart.setValueAt(detail.getThanhTien(), row, 5);
+                            gioHang.setValueAt(detail.getTienGiamDong(), row, 4);
+                            gioHang.setValueAt(detail.getThanhTien(), row, 5);
                         }
                     } finally { state.applyingQuote = false; }
-                    subtotal.setText(UiFormat.money(invoice.getTongGiaGoc()) + " đ");
-                    discount.setText(UiFormat.money(invoice.getTienGiam()) + " đ");
-                    reward.setText(UiFormat.money(invoice.getTienGiamDiem()) + " đ");
-                    vat.setText(UiFormat.money(invoice.getTienVat()) + " đ");
-                    total.setText(UiFormat.money(invoice.getTongThanhToan()) + " đ");
-                    change.setText(UiFormat.money(invoice.getTienThua()) + " đ");
+                    tamTinh.setText(UiFormat.money(hoaDon.getTongGiaGoc()) + " đ");
+                    tienGiam.setText(UiFormat.money(hoaDon.getTienGiam()) + " đ");
+                    tienGiamDiem.setText(UiFormat.money(hoaDon.getTienGiamDiem()) + " đ");
+                    vat.setText(UiFormat.money(hoaDon.getTienVat()) + " đ");
+                    tongThanhToan.setText(UiFormat.money(hoaDon.getTongThanhToan()) + " đ");
+                    tienThua.setText(UiFormat.money(hoaDon.getTienThua()) + " đ");
                     state.quoted = true;
                     state.btnThanhToan.setEnabled(!state.busy);
                 } catch (Exception exception) {
                     state.quoted = false;
-                    total.setText("Chưa có tổng hợp lệ");
+                    tongThanhToan.setText("Chưa có tổng hợp lệ");
                     state.btnThanhToan.setEnabled(false);
                     status.setText("Chưa thể tính tổng. Kiểm tra giỏ hàng và dữ liệu thanh toán.");
                 }
@@ -1771,51 +1771,51 @@ public final class PosFrame extends JFrame {
         }.execute();
     }
 
-    private void checkout(final YeuCauThanhToan request, final DefaultTableModel cart, final JTextField productSearch,
-            final JComboBox<SanPham> products, final JSpinner quantity, final JTextField customerSearch,
-            final JComboBox<KhachHang> customers, final JComboBox<KhuyenMai> promotions, final JRadioButton noDiscount,
-            final JTextField rewards, final JTextField tender, final JComboBox<String> method,
-            final JComboBox<String> result, final JLabel subtotal, final JLabel discount, final JLabel reward,
-            final JLabel vat, final JLabel total, final JLabel change, final JLabel loyalty) {
-        final SaleUiState state = cartStates.get(cart);
-        final Actor payingActor = actor;
+    private void thanhToan(final YeuCauThanhToan yeuCau, final DefaultTableModel gioHang, final JTextField timKiemSanPham,
+            final JComboBox<SanPham> dsSanPham, final JSpinner soLuong, final JTextField timKiemKhachHang,
+            final JComboBox<KhachHang> dsKhachHang, final JComboBox<KhuyenMai> dsKhuyenMai, final JRadioButton khongGiamGia,
+            final JTextField diemThuong, final JTextField tienKhachDua, final JComboBox<String> phuongThuc,
+            final JComboBox<String> result, final JLabel tamTinh, final JLabel tienGiam, final JLabel tienGiamDiem,
+            final JLabel vat, final JLabel tongThanhToan, final JLabel tienThua, final JLabel lblDiemThanhVien) {
+        final SaleUiState state = cartStates.get(gioHang);
+        final NguoiDung nguoiDangThanhToan = actor;
         final boolean resolving = state.pending != null;
-        state.pending = request;
+        state.pending = yeuCau;
         state.busy = true;
-        invalidateQuote(state);
-        setSaleLocked(state, true);
+        huyBaoGia(state);
+        khoaBanHang(state, true);
         new SwingWorker<HoaDon, Void>() {
             @Override protected HoaDon doInBackground() throws Exception {
-                return new SaleService().thanhToan(payingActor, request);
+                return new DichVuBanHang().thanhToan(nguoiDangThanhToan, yeuCau);
             }
             @Override protected void done() {
                 state.busy = false;
                 try {
-                    HoaDon invoice = get();
+                    HoaDon hoaDon = get();
                     // A committed invoice completes the cart before any receipt operation.
                     state.pending = null;
-                    resetSale(cart, productSearch, products, quantity, customerSearch, customers, promotions,
-                            noDiscount, rewards, tender, method, result, subtotal, discount, reward, vat, total, change, loyalty);
-                    invalidateQuote(state);
-                    total.setText("0");
-                    setSaleLocked(state, false);
-                    if (actor != payingActor || state != saleState) return;
-                    status.setText("Đã thanh toán " + invoice.getMaHoaDon() + ": " + invoice.getTongThanhToan() + " đ.");
+                    xoaGiaoDich(gioHang, timKiemSanPham, dsSanPham, soLuong, timKiemKhachHang, dsKhachHang, dsKhuyenMai,
+                            khongGiamGia, diemThuong, tienKhachDua, phuongThuc, result, tamTinh, tienGiam, tienGiamDiem, vat, tongThanhToan, tienThua, lblDiemThanhVien);
+                    huyBaoGia(state);
+                    tongThanhToan.setText("0");
+                    khoaBanHang(state, false);
+                    if (actor != nguoiDangThanhToan || state != saleState) return;
+                    status.setText("Đã thanh toán " + hoaDon.getMaHoaDon() + ": " + hoaDon.getTongThanhToan() + " đ.");
                     JOptionPane.showMessageDialog(PosFrame.this,
-                            "Thanh toán thành công: " + invoice.getMaHoaDon(), "Thanh toán", JOptionPane.INFORMATION_MESSAGE);
-                    loadPaidReceipt(payingActor, invoice);
+                            "Thanh toán thành công: " + hoaDon.getMaHoaDon(), "Thanh toán", JOptionPane.INFORMATION_MESSAGE);
+                    taiHoaDonDaThanhToan(nguoiDangThanhToan, hoaDon);
                 } catch (Exception exception) {
                     Throwable cause = exception;
                     while (cause.getCause() != null && cause instanceof java.util.concurrent.ExecutionException) cause = cause.getCause();
-                    boolean uncertain = resolving || cause instanceof service.CheckoutOutcomeUnknownException;
+                    boolean uncertain = resolving || cause instanceof service.UnknownCheckoutStatusException;
                     if (!uncertain) state.pending = null;
-                    setSaleLocked(state, uncertain);
-                    if (actor != payingActor || state != saleState) return;
+                    khoaBanHang(state, uncertain);
+                    if (actor != nguoiDangThanhToan || state != saleState) return;
                     if (uncertain) {
                         JOptionPane.showMessageDialog(PosFrame.this, cause.getMessage(),
                                 "Cần kiểm tra kết quả thanh toán", JOptionPane.WARNING_MESSAGE);
                     } else {
-                        showServiceError("Thanh toán không thành công", exception);
+                        baoLoiDichVu("Thanh toán không thành công", exception);
                         if (state.refresh != null) state.refresh.run();
                     }
                 }
@@ -1823,69 +1823,69 @@ public final class PosFrame extends JFrame {
         }.execute();
     }
 
-    private void loadPaidReceipt(final Actor paidActor, final HoaDon invoice) {
+    private void taiHoaDonDaThanhToan(final NguoiDung nguoiThanhToan, final HoaDon hoaDon) {
         new SwingWorker<CauHinhCuaHang, Void>() {
             @Override protected CauHinhCuaHang doInBackground() throws Exception {
-                return new SettingsService().layChoHoaDon(paidActor);
+                return new DichVuCauHinh().layChoHoaDon(nguoiThanhToan);
             }
             @Override protected void done() {
-                if (actor != paidActor) return;
-                try { previewReceipt(new ReceiptPrintable(get(), invoice)); }
+                if (actor != nguoiThanhToan) return;
+                try { xemTruocHoaDon(new ReceiptPrintable(get(), hoaDon)); }
                 catch (Exception exception) {
                     int choice = JOptionPane.showConfirmDialog(PosFrame.this,
-                            "Thanh toán " + invoice.getMaHoaDon() + " đã thành công. Không tải được dữ liệu in. Thử lại hóa đơn?",
+                            "Thanh toán " + hoaDon.getMaHoaDon() + " đã thành công. Không tải được dữ liệu in. Thử lại hóa đơn?",
                             "Thanh toán thành công — lỗi hóa đơn in", JOptionPane.YES_NO_OPTION);
-                    if (choice == JOptionPane.YES_OPTION) loadPaidReceipt(paidActor, invoice);
+                    if (choice == JOptionPane.YES_OPTION) taiHoaDonDaThanhToan(nguoiThanhToan, hoaDon);
                 }
             }
         }.execute();
     }
 
-    private static void resetSale(DefaultTableModel cart, JTextField productSearch, JComboBox<SanPham> products,
-            JSpinner quantity, JTextField customerSearch, JComboBox<KhachHang> customers,
-            JComboBox<KhuyenMai> promotions, JRadioButton noDiscount, JTextField rewards, JTextField tender,
-            JComboBox<String> method, JComboBox<String> result, JLabel subtotal, JLabel discount, JLabel reward,
-            JLabel vat, JLabel total, JLabel change, JLabel loyalty) {
-        cart.setRowCount(0);
-        productSearch.setText("");
-        products.removeAllItems();
-        quantity.setValue(Integer.valueOf(1));
-        customerSearch.setText("");
-        customers.removeAllItems();
-        customers.addItem(null);
-        customers.setSelectedIndex(0);
-        promotions.removeAllItems();
-        noDiscount.setSelected(true);
-        rewards.setText("0");
-        tender.setText("");
-        method.setSelectedItem("TIEN_MAT");
+    private static void xoaGiaoDich(DefaultTableModel gioHang, JTextField timKiemSanPham, JComboBox<SanPham> dsSanPham,
+            JSpinner soLuong, JTextField timKiemKhachHang, JComboBox<KhachHang> dsKhachHang,
+            JComboBox<KhuyenMai> dsKhuyenMai, JRadioButton khongGiamGia, JTextField diemThuong, JTextField tienKhachDua,
+            JComboBox<String> phuongThuc, JComboBox<String> result, JLabel tamTinh, JLabel tienGiam, JLabel tienGiamDiem,
+            JLabel vat, JLabel tongThanhToan, JLabel tienThua, JLabel lblDiemThanhVien) {
+        gioHang.setRowCount(0);
+        timKiemSanPham.setText("");
+        dsSanPham.removeAllItems();
+        soLuong.setValue(Integer.valueOf(1));
+        timKiemKhachHang.setText("");
+        dsKhachHang.removeAllItems();
+        dsKhachHang.addItem(null);
+        dsKhachHang.setSelectedIndex(0);
+        dsKhuyenMai.removeAllItems();
+        khongGiamGia.setSelected(true);
+        diemThuong.setText("0");
+        tienKhachDua.setText("");
+        phuongThuc.setSelectedItem("TIEN_MAT");
         result.setSelectedItem("THÀNH CÔNG");
-        subtotal.setText("0");
-        discount.setText("0");
-        reward.setText("0");
+        tamTinh.setText("0");
+        tienGiam.setText("0");
+        tienGiamDiem.setText("0");
         vat.setText("0");
-        total.setText("0");
-        change.setText("0");
-        showLoyalty(null, loyalty);
+        tongThanhToan.setText("0");
+        tienThua.setText("0");
+        hienDiemThanhVien(null, lblDiemThanhVien);
     }
 
-    private void previewReceipt(final ReceiptPrintable receipt) {
+    private void xemTruocHoaDon(final ReceiptPrintable banInHoaDon) {
         JTextArea text = new JTextArea();
         text.setEditable(false);
-        for (String line : receipt.lines()) text.append(line + "\n");
+        for (String line : banInHoaDon.lines()) text.append(line + "\n");
         JScrollPane scroll = new JScrollPane(text);
         scroll.setPreferredSize(DialogActions.PREVIEW_TEXT);
         Object[] choices = {"In", "Xuất PDF", "Đóng"};
         int choice = JOptionPane.showOptionDialog(this, scroll, "Xem trước hóa đơn — thanh toán đã thành công",
                 JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, choices, choices[2]);
-        if (choice == 0) ReceiptPrinting.print(this, receipt);
-        else if (choice == 1) exportReceiptPdf(receipt);
+        if (choice == 0) ReceiptPrinting.print(this, banInHoaDon);
+        else if (choice == 1) xuatHoaDonPdf(banInHoaDon);
     }
 
-    private void exportReceiptPdf(final ReceiptPrintable receipt) {
+    private void xuatHoaDonPdf(final ReceiptPrintable banInHoaDon) {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Lưu hóa đơn PDF");
-        String invoiceId = receipt.invoiceId();
+        String invoiceId = banInHoaDon.invoiceId();
         chooser.setSelectedFile(new File("hoa-don-" + invoiceId + ".pdf"));
         if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION)
             return;
@@ -1896,7 +1896,7 @@ public final class PosFrame extends JFrame {
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                ReceiptPdfExporter.export(receipt, target);
+                ReceiptPdfExporter.export(banInHoaDon, target);
                 return null;
             }
             @Override
@@ -1908,13 +1908,13 @@ public final class PosFrame extends JFrame {
                             "Đã lưu hóa đơn PDF:\n" + target.getAbsolutePath(),
                             "Xuất hóa đơn thành công", JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception exception) {
-                    showServiceError("Thanh toán đã thành công; xuất PDF thất bại. Có thể thử lại từ danh sách hóa đơn.", exception);
+                    baoLoiDichVu("Thanh toán đã thành công; xuất PDF thất bại. Có thể thử lại từ danh sách hóa đơn.", exception);
                 }
             }
         }.execute();
     }
 
-    private void showServiceError(String title, Exception exception) {
+    private void baoLoiDichVu(String title, Exception exception) {
         Throwable cause = exception;
         while (cause.getCause() != null
                 && (cause instanceof java.util.concurrent.ExecutionException
@@ -1938,28 +1938,28 @@ public final class PosFrame extends JFrame {
         JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE);
     }
 
-    private void addQuoteRefreshListener(final JTextField field, final Runnable refresh,
+    private void themListenerCapNhatBaoGia(final JTextField field, final Runnable refresh,
             final boolean integer) {
         final Timer debounce = new Timer(400, event -> refresh.run());
         debounce.setRepeats(false);
         field.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent event) {
-                refreshIfValid();
+                capNhatNeuHopLe();
             }
 
             @Override
             public void removeUpdate(DocumentEvent event) {
-                refreshIfValid();
+                capNhatNeuHopLe();
             }
 
             @Override
             public void changedUpdate(DocumentEvent event) {
-                refreshIfValid();
+                capNhatNeuHopLe();
             }
 
-            private void refreshIfValid() {
-                invalidateQuote(saleState);
+            private void capNhatNeuHopLe() {
+                huyBaoGia(saleState);
                 String value = field.getText().trim();
                 if (value.isEmpty()) {
                     debounce.restart();

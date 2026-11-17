@@ -1,6 +1,6 @@
 package testsupport;
 
-import connectDB.DBConnection;
+import connectDB.ConnectDB;
 import entity.*;
 import service.*;
 import java.math.BigDecimal;
@@ -10,10 +10,10 @@ import java.util.*;
 
 /** Exact fixture ownership and a full row snapshot make cleanup failures visible. */
 final class TestFixtures implements AutoCloseable {
-  final Actor manager;
-  final MasterDataService masters = new MasterDataService();
-  final SaleService sales = new SaleService();
-  final PurchaseService purchases = new PurchaseService();
+  final NguoiDung manager;
+  final DichVuDanhMuc masters = new DichVuDanhMuc();
+  final DichVuBanHang sales = new DichVuBanHang();
+  final DichVuNhapHang purchases = new DichVuNhapHang();
   private final Map<String, List<String>> owned = new LinkedHashMap<String, List<String>>();
   private final Map<String, List<String>> baseline;
   private final CauHinhCuaHang settings;
@@ -24,8 +24,8 @@ final class TestFixtures implements AutoCloseable {
   TestFixtures() throws Exception {
     TestDatabase.requireIsolated();
     baseline = snapshot();
-    manager = new AuthService().dangNhapActor("quanly", "MatKhau123".toCharArray());
-    settings = new SettingsService().lay(manager);
+    manager = new DichVuDangNhap().dangNhapNguoiDung("quanly", "MatKhau123".toCharArray());
+    settings = new DichVuCauHinh().lay(manager);
   }
 
   String track(String table, String id) {
@@ -79,8 +79,8 @@ final class TestFixtures implements AutoCloseable {
     account.setMaNhanVien(id); account.setVaiTro(role); account.setTrangThai("HOAT_DONG");
     masters.luuTaiKhoan(manager, account, "MatKhau123".toCharArray()); return account;
   }
-  Actor login(TaiKhoan account) throws Exception {
-    return new AuthService().dangNhapActor(account.getTenDangNhap(), "MatKhau123".toCharArray());
+  NguoiDung login(TaiKhoan account) throws Exception {
+    return new DichVuDangNhap().dangNhapNguoiDung(account.getTenDangNhap(), "MatKhau123".toCharArray());
   }
   PhieuNhap purchase(SanPham product, int quantity, long cost, boolean complete) throws Exception {
     PhieuNhap value = new PhieuNhap();
@@ -94,13 +94,13 @@ final class TestFixtures implements AutoCloseable {
   }
   KhuyenMai promotion(String rate, Long minimum, String... products) throws Exception {
     KhuyenMai value = new KhuyenMai();
-    value.setMaKhuyenMai(track("KHUYEN_MAI", new PromotionService().maKhuyenMaiTiepTheo(manager)));
+    value.setMaKhuyenMai(track("KHUYEN_MAI", new DichVuKhuyenMai().maKhuyenMaiTiepTheo(manager)));
     value.setTenKhuyenMai("Khuyến mãi giảm " + rate.replace('.', ' ') + "%");
     value.setTyLeGiam(new BigDecimal(rate)); value.setPhamVi(products.length == 0 ? "TOAN_DON" : "THEO_SAN_PHAM");
     value.setDonToiThieu(minimum == null ? null : BigDecimal.valueOf(minimum));
     value.setBatDau(LocalDateTime.now().minusDays(1)); value.setKetThuc(LocalDateTime.now().plusDays(1));
     value.setTrangThai("DANG_HOAT_DONG"); value.setMaSanPham(new LinkedHashSet<String>(Arrays.asList(products)));
-    new PromotionService().luu(manager, value); return value;
+    new DichVuKhuyenMai().luu(manager, value); return value;
   }
   YeuCauThanhToan request(SanPham product, int quantity) throws Exception {
     YeuCauThanhToan request = new YeuCauThanhToan();
@@ -117,18 +117,18 @@ final class TestFixtures implements AutoCloseable {
   int stock(SanPham product) throws Exception { return sales.tonKho(manager, product.getMaSanPham()); }
 
   static void sql(String query, Object... args) throws SQLException {
-    try (Connection connection = DBConnection.open(); PreparedStatement statement = connection.prepareStatement(query)) {
+    try (Connection connection = ConnectDB.open(); PreparedStatement statement = connection.prepareStatement(query)) {
       bind(statement, args); statement.executeUpdate();
     }
   }
   static long number(String query, Object... args) throws SQLException {
-    try (Connection connection = DBConnection.open(); PreparedStatement statement = connection.prepareStatement(query)) {
+    try (Connection connection = ConnectDB.open(); PreparedStatement statement = connection.prepareStatement(query)) {
       bind(statement, args);
       try (ResultSet result = statement.executeQuery()) { result.next(); return result.getLong(1); }
     }
   }
   static BigDecimal decimal(String query, Object... args) throws SQLException {
-    try (Connection connection = DBConnection.open(); PreparedStatement statement = connection.prepareStatement(query)) {
+    try (Connection connection = ConnectDB.open(); PreparedStatement statement = connection.prepareStatement(query)) {
       bind(statement, args);
       try (ResultSet result = statement.executeQuery()) { result.next(); return result.getBigDecimal(1); }
     }
@@ -151,7 +151,7 @@ final class TestFixtures implements AutoCloseable {
   }
   static Map<String, List<String>> snapshot() throws SQLException {
     Map<String, List<String>> snapshot = new TreeMap<String, List<String>>();
-    try (Connection connection = DBConnection.open(); Statement statement = connection.createStatement()) {
+    try (Connection connection = ConnectDB.open(); Statement statement = connection.createStatement()) {
       List<String> tables = new ArrayList<String>();
       try (ResultSet rows = statement.executeQuery("SELECT name FROM sys.tables WHERE is_ms_shipped=0")) {
         while (rows.next()) tables.add(rows.getString(1));
@@ -175,8 +175,8 @@ final class TestFixtures implements AutoCloseable {
   }
   @Override public void close() throws SQLException {
     // Close is deliberately fail-fast; a cleanup error cannot turn a suite green.
-    try (Connection restored = openAndRestore()) { new dao.CauHinhCuaHangDAO().save(settings, restored); }
-    try (Connection connection = DBConnection.open()) {
+    try (Connection restored = openAndRestore()) { new dao.CauHinhCuaHang_DAO().luu(settings, restored); }
+    try (Connection connection = ConnectDB.open()) {
       connection.setAutoCommit(false);
       String[][] cleanup = {
           {"HOA_DON", "PHAN_BO_XUAT_LO", "ma_hoa_don"}, {"HOA_DON", "CHI_TIET_HOA_DON", "ma_hoa_don"},
@@ -203,6 +203,6 @@ final class TestFixtures implements AutoCloseable {
     sql("IF NOT EXISTS(SELECT 1 FROM CAU_HINH_CUA_HANG WHERE id=1) INSERT INTO CAU_HINH_CUA_HANG "
         + "(id,ten_cua_hang,dia_chi,so_dien_thoai,ty_le_vat) VALUES (1,?,?,?,?)",
         settings.getTenCuaHang(), settings.getDiaChi(), settings.getSoDienThoai(), settings.getTyLeVat());
-    return DBConnection.open();
+    return ConnectDB.open();
   }
 }

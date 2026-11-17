@@ -137,7 +137,7 @@ Sơ đồ lớp PlantUML được lưu cùng tài liệu trong `docs/`; sơ đ�
 |---|---|---|
 | `entity` | `NhanVien`, `TaiKhoan`, `LoaiSanPham`, `SanPham`, `KhachHang`, `NhaCungCap`, `PhieuNhap`, `ChiTietPhieuNhap`, `LoTonKho`, `PhieuDieuChinhTon`, `ChiTietPhieuDieuChinh`, `HoaDon`, `ChiTietHoaDon`, `PhanBoXuatLo`, `KhuyenMai`, `KhuyenMaiSanPham`, `CauHinhCuaHang` | Entity biểu diễn dữ liệu; không chứa JDBC hay điều khiển Swing. |
 | `dao` | DAO tương ứng với entity và truy vấn báo cáo | Chỉ thực hiện SQL/ánh xạ kết quả; nhận `Connection` do service truyền khi nằm trong transaction. |
-| `service` | `AuthService`, `MasterDataService`, `PurchaseService`, `InventoryService`, `PromotionService`, `SaleService`, `ReportService`, `SettingsService` | Kiểm tra quyền, dữ liệu, điều phối DAO và sở hữu transaction. |
+| `service` | `DichVuDangNhap`, `DichVuDanhMuc`, `DichVuNhapHang`, `DichVuTonKho`, `DichVuKhuyenMai`, `DichVuBanHang`, `DichVuBaoCao`, `DichVuCauHinh` | Kiểm tra quyền, dữ liệu, điều phối DAO và sở hữu transaction. |
 | `graphicUI` | Đăng nhập, dashboard, danh mục, nhập hàng, điều chỉnh tồn, bán hàng, hóa đơn, khuyến mãi, báo cáo, cấu hình | Không gọi DAO trực tiếp; chỉ lấy dữ liệu từ service. |
 
 Không tạo interface chỉ có một implementation, factory hoặc lớp `BaseDAO`. Các enum tối thiểu: `VaiTro`, `TrangThaiNhanVien`, `TrangThaiSanPham`, `TrangThaiPhieuNhap`, `TrangThaiHoaDon`, `PhuongThucThanhToan`, `LoaiGiamGia`, `PhamViKhuyenMai`, `HangThanhVien`.
@@ -157,7 +157,7 @@ Không tạo interface chỉ có một implementation, factory hoặc lớp `Bas
 
 ### 2.3. Giao dịch và luồng phụ thuộc
 
-`SaleService` mở transaction; nếu hóa đơn có khách hàng, khóa hàng khách bằng `SELECT ... WITH (UPDLOCK, ROWLOCK)` trước khi kiểm tra/trừ điểm thưởng khả dụng; sau đó khóa lô, kiểm tra lại số lượng, ghi hóa đơn/chi tiết/phân bổ, trừ lô và cập nhật hai loại điểm rồi mới commit. `PurchaseService` và `InventoryService` xử lý hoàn tất nhập/điều chỉnh theo cùng nguyên tắc. Khi có lỗi trước commit, service rollback và giao diện giữ giỏ để sửa. Khi mất phản hồi commit, dùng lại mã thanh toán để xác định kết quả; không coi lỗi sau commit là giao dịch chưa thanh toán. Mỗi transaction thay đổi dữ liệu giữ khóa ứng dụng `POS_AUTHORIZATION` dạng Shared và kiểm tra tài khoản/nhân viên/vai trò trên cùng connection; cập nhật phân quyền dùng khóa Exclusive. Transaction lấy khóa trước sẽ hoàn tất trước; sau khi thay đổi quyền commit, thao tác kế tiếp của phiên cũ bị từ chối.
+`DichVuBanHang` mở transaction; nếu hóa đơn có khách hàng, khóa hàng khách bằng `SELECT ... WITH (UPDLOCK, ROWLOCK)` trước khi kiểm tra/trừ điểm thưởng khả dụng; sau đó khóa lô, kiểm tra lại số lượng, ghi hóa đơn/chi tiết/phân bổ, trừ lô và cập nhật hai loại điểm rồi mới commit. `DichVuNhapHang` và `DichVuTonKho` xử lý hoàn tất nhập/điều chỉnh theo cùng nguyên tắc. Khi có lỗi trước commit, service rollback và giao diện giữ giỏ để sửa. Khi mất phản hồi commit, dùng lại mã thanh toán để xác định kết quả; không coi lỗi sau commit là giao dịch chưa thanh toán. Mỗi transaction thay đổi dữ liệu giữ khóa ứng dụng `POS_AUTHORIZATION` dạng Shared và kiểm tra tài khoản/nhân viên/vai trò trên cùng connection; cập nhật phân quyền dùng khóa Exclusive. Transaction lấy khóa trước sẽ hoàn tất trước; sau khi thay đổi quyền commit, thao tác kế tiếp của phiên cũ bị từ chối.
 
 ## 3. Thiết kế cơ sở dữ liệu Microsoft SQL Server và ràng buộc
 
@@ -207,10 +207,10 @@ ERD PlantUML được lưu cùng tài liệu trong `docs/`. Lược đồ có đ
 
 | Yêu cầu đề bài | Màn hình/service | Bảng |
 |---|---|---|
-| CRUD, danh sách, chi tiết, tìm kiếm | Danh mục, `MasterDataService` | Nhân viên, tài khoản, loại, sản phẩm, khách, nhà cung cấp, khuyến mãi. |
-| Lập và xuất hóa đơn | Bán hàng, `SaleService` | Hóa đơn, chi tiết hóa đơn, phân bổ xuất lô, lô tồn. |
+| CRUD, danh sách, chi tiết, tìm kiếm | Danh mục, `DichVuDanhMuc` | Nhân viên, tài khoản, loại, sản phẩm, khách, nhà cung cấp, khuyến mãi. |
+| Lập và xuất hóa đơn | Bán hàng, `DichVuBanHang` | Hóa đơn, chi tiết hóa đơn, phân bổ xuất lô, lô tồn. |
 | Cập nhật/xóa bảng quan hệ | Danh mục/chứng từ, các service | Toàn bộ FK; trạng thái thay cho xóa khi có lịch sử. |
-| Thống kê cơ bản | Báo cáo, `ReportService` | Hóa đơn, chi tiết, lô, phiếu nhập, sản phẩm, khách hàng. |
+| Thống kê cơ bản | Báo cáo, `DichVuBaoCao` | Hóa đơn, chi tiết, lô, phiếu nhập, sản phẩm, khách hàng. |
 | 2 hoặc 3 lớp | Tất cả màn hình/service/DAO | Không áp dụng trực tiếp. |
 
 ## Phần 4 cần bổ sung khi hiện thực

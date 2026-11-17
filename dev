@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 LOCAL="$ROOT/.dev"
+CLASSES="$LOCAL/classes"
 JDK="${POS_JAVA_HOME:-$LOCAL/jdk17}"
 if [[ -z "${POS_JAVA_HOME:-}" && -x /usr/lib/jvm/java-17-openjdk/bin/javac ]]; then
     JDK=/usr/lib/jvm/java-17-openjdk
@@ -58,10 +59,10 @@ configure_eclipse() {
 
 build() {
     install_jdk
-    mkdir -p "$ROOT/bin"
+    mkdir -p "$CLASSES"
     mapfile -d '' sources < <(find "$ROOT/src" -name '*.java' -print0)
     "$JDK/bin/javac" -encoding UTF-8 --release 17 -Xlint:all -Werror \
-        -cp "$ROOT/lib/mssql-jdbc-13.2.0.jre11.jar" -d "$ROOT/bin" "${sources[@]}"
+        -cp "$ROOT/lib/mssql-jdbc-13.2.0.jre11.jar" -d "$CLASSES" "${sources[@]}"
 }
 
 db_up() {
@@ -113,10 +114,10 @@ backend_test() {
     build
     export POS_TEST_ADMIN_PASSWORD="$SQLSERVER_SA_PASSWORD"
     if [[ "${1:-backend}" == gui ]]; then
-        xvfb-run -a -s '-screen 0 1600x1000x24' timeout 180 "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" testsupport.PosGuiSmoke
+        xvfb-run -a -s '-screen 0 1600x1000x24' timeout 180 "$JDK/bin/java" -cp "$CLASSES:$SQLSERVER_JAR" testsupport.PosGuiSmoke
     else
-        "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" testsupport.BackendSmoke
-        "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" testsupport.BackendTransactionSmoke
+        "$JDK/bin/java" -cp "$CLASSES:$SQLSERVER_JAR" testsupport.BackendSmoke
+        "$JDK/bin/java" -cp "$CLASSES:$SQLSERVER_JAR" testsupport.BackendTransactionSmoke
     fi
 }
 
@@ -142,9 +143,9 @@ case "${1:-help}" in
         build
         [[ -n "${POS_DB_PASSWORD:-}" ]] || { echo 'POS_DB_PASSWORD required' >&2; exit 1; }
         if [[ "$1" == run ]]; then
-            exec "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" graphicUI.PosApplication
+            exec "$JDK/bin/java" -cp "$CLASSES:$SQLSERVER_JAR" graphicUI.PosApplication
         elif [[ "$1" == smoke ]]; then
-            "$JDK/bin/java" -cp "$ROOT/bin:$SQLSERVER_JAR" graphicUI.PosApplication --db-smoke
+            "$JDK/bin/java" -cp "$CLASSES:$SQLSERVER_JAR" graphicUI.PosApplication --db-smoke
         fi
         ;;
     *) printf '%s\n' 'Usage: ./dev {setup|eclipse|db-up|db-down|build|run|smoke|backend-test|gui-test}' ;;

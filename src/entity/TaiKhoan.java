@@ -3,8 +3,8 @@ package entity;
 public class TaiKhoan {
   private long accountVersion;
   private long employeeVersion;
-  public long getAccountVersion() { return accountVersion; }
-  public long getEmployeeVersion() { return employeeVersion; }
+  public long getPhienBanTaiKhoan() { return accountVersion; }
+  public long getPhienBanNhanVien() { return employeeVersion; }
   public void setAccountVersion(long value) { accountVersion = value; }
   public void setEmployeeVersion(long value) { employeeVersion = value; }
 

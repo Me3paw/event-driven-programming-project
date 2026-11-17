@@ -1,0 +1,207 @@
+package graphicUI;
+
+import components.DialogActions;
+import components.FormValidator;
+import components.UiTheme;
+import entity.TaiKhoan;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.SwingWorker;
+import javax.swing.table.DefaultTableModel;
+import service.NguoiDung;
+import service.DichVuDanhMuc;
+
+@SuppressWarnings("serial")
+public final class TaiKhoanPanel extends JPanel {
+    private final NguoiDung actor;
+    private final JTextField key = new JTextField(14);
+    private final JComboBox<String> state = new JComboBox<String>(
+            new String[] {"Tất cả", "HOAT_DONG", "KHOA"});
+    private final List<TaiKhoan> rows = new ArrayList<TaiKhoan>();
+    private final DefaultTableModel model = new DefaultTableModel(
+            new String[] {"Tên đăng nhập", "Mã nhân viên", "Họ tên", "Chức vụ", "Vai trò", "Trạng thái"}, 0) {
+        @Override public boolean isCellEditable(int row, int column) { return false; }
+    };
+    private final JTable table = new JTable(model);
+
+    public TaiKhoanPanel(NguoiDung actor) {
+        super(new BorderLayout(0, 8));
+        this.actor = actor;
+        setBackground(UiTheme.BACKGROUND);
+        table.setAutoCreateRowSorter(true);
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        bar.setBackground(Color.WHITE);
+        bar.setBorder(UiTheme.CARD);
+        themTruong(bar, "Từ khóa", key);
+        themTruong(bar, "Trạng thái", state);
+        themNut(bar, "Tìm", this::taiDanhSach);
+        themNut(bar, "Chi tiết", this::xemChiTiet);
+        themNut(bar, "Thêm tài khoản", () -> sua(null));
+        themNut(bar, "Sửa", () -> {
+            TaiKhoan value = mucDaChon();
+            if (value == null) { baoLoi("Hãy chọn tài khoản."); return; }
+            sua(value);
+        });
+        themNut(bar, "Đổi trạng thái", this::doiTrangThai);
+        add(bar, BorderLayout.NORTH);
+        add(new JScrollPane(table), BorderLayout.CENTER);
+        taiDanhSach();
+    }
+
+    private void taiDanhSach() {
+        final String keyword = key.getText().trim();
+        final String filter = "Tất cả".equals(state.getSelectedItem()) ? ""
+                : (String) state.getSelectedItem();
+        new SwingWorker<List<TaiKhoan>, Void>() {
+            @Override protected List<TaiKhoan> doInBackground() throws Exception {
+                return new DichVuDanhMuc().timTaiKhoan(actor, keyword, "", filter);
+            }
+            @Override protected void done() {
+                try {
+                    rows.clear();
+                    rows.addAll(get());
+                    model.setRowCount(0);
+                    for (TaiKhoan value : rows)
+                        model.addRow(new Object[] {value.getTenDangNhap(), value.getMaNhanVien(),
+                                value.getTenNhanVien(), value.getChucVuNhanVien(),
+                                value.getVaiTro(), value.getTrangThai()});
+                } catch (Exception exception) {
+                    baoLoi("Không tải được tài khoản.", exception);
+                }
+            }
+        }.execute();
+    }
+
+    private TaiKhoan mucDaChon() {
+        int row = table.getSelectedRow();
+        return row < 0 ? null : rows.get(table.convertRowIndexToModel(row));
+    }
+
+    private void xemChiTiet() {
+        TaiKhoan value = mucDaChon();
+        if (value == null) { baoLoi("Hãy chọn tài khoản."); return; }
+        JPanel details = new JPanel(new GridLayout(0, 2, 8, 4));
+        themChiTiet(details, "Tên đăng nhập", value.getTenDangNhap());
+        themChiTiet(details, "Mã nhân viên", value.getMaNhanVien());
+        themChiTiet(details, "Họ tên", value.getTenNhanVien());
+        themChiTiet(details, "Chức vụ", value.getChucVuNhanVien());
+        themChiTiet(details, "Vai trò", value.getVaiTro());
+        themChiTiet(details, "Trạng thái", value.getTrangThai());
+        DialogActions.info(this, details, "Chi tiết tài khoản");
+    }
+
+    private void sua(TaiKhoan existing) {
+        JTextField username = new JTextField(existing == null ? "" : existing.getTenDangNhap());
+        JTextField employee = new JTextField(existing == null ? "" : existing.getMaNhanVien());
+        JComboBox<String> role = new JComboBox<String>(new String[] {"QUAN_LY", "THU_NGAN"});
+        role.setSelectedItem(existing == null ? "THU_NGAN" : existing.getVaiTro());
+        JPasswordField password = new JPasswordField();
+        username.setEditable(existing == null);
+        FormValidator validator = new FormValidator();
+        JPanel form = FormValidator.form();
+        form.add(validator.row("Tên đăng nhập", username));
+        form.add(validator.row("Mã nhân viên", employee));
+        form.add(validator.row("Vai trò", role));
+        form.add(validator.row(existing == null ? "Mật khẩu" : "Mật khẩu mới", password));
+        validator.require(username, "Tên đăng nhập không được để trống.");
+        validator.matches(username, "[A-Za-z0-9_.\\-]{3,50}",
+                "Tên đăng nhập chỉ gồm chữ cái, số, dấu _ . - và dài 3-50 ký tự.");
+        validator.require(employee, "Mã nhân viên không được để trống.");
+        validator.matches(employee, "NV[0-9]{3}",
+                "Mã nhân viên sai định dạng, phải có dạng NV + đúng 3 số (ví dụ: NV001).");
+        if (existing == null)
+            validator.require(password, "Mật khẩu không được để trống.");
+        validator.check(password, text -> text.isEmpty() || text.length() >= 6,
+                "Mật khẩu phải có ít nhất 6 ký tự.");
+        boolean confirmed = DialogActions.confirm(this, form,
+                existing == null ? "Tạo tài khoản" : "Đặt lại tài khoản", validator);
+        final char[] secret = password.getPassword();
+        password.setText("");
+        if (!confirmed) { Arrays.fill(secret, '\0'); return; }
+        final String user = username.getText().trim();
+        final String employeeId = employee.getText().trim();
+        TaiKhoan value = new TaiKhoan();
+        value.setTenDangNhap(user);
+        value.setMaNhanVien(employeeId);
+        value.setVaiTro((String) role.getSelectedItem());
+        value.setTrangThai(existing == null ? "HOAT_DONG" : existing.getTrangThai());
+        final boolean isNew = existing == null;
+        new SwingWorker<Void, Void>() {
+            @Override protected Void doInBackground() throws Exception {
+                DichVuDanhMuc service = new DichVuDanhMuc();
+                if (isNew) {
+                    for (TaiKhoan found : service.timTaiKhoan(actor, value.getTenDangNhap(), null, null))
+                        if (value.getTenDangNhap().equals(found.getTenDangNhap()))
+                            throw new IllegalArgumentException("Tên đăng nhập đã tồn tại");
+                }
+                service.luuTaiKhoan(actor, value, secret);
+                return null;
+            }
+            @Override protected void done() {
+                Arrays.fill(secret, '\0');
+                try { get(); taiDanhSach(); JOptionPane.showMessageDialog(TaiKhoanPanel.this, "Lưu tài khoản thành công."); }
+                catch (Exception exception) { baoLoi("Không lưu được tài khoản.", exception); }
+            }
+        }.execute();
+    }
+
+    private void doiTrangThai() {
+        TaiKhoan value = mucDaChon();
+        if (value == null) { baoLoi("Hãy chọn tài khoản."); return; }
+        String next = "HOAT_DONG".equals(value.getTrangThai()) ? "KHOA" : "HOAT_DONG";
+        if (JOptionPane.showConfirmDialog(this, "Đổi trạng thái tài khoản " + value.getTenDangNhap() + "?",
+                "Xác nhận", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+        new SwingWorker<Void, Void>() {
+            @Override protected Void doInBackground() throws Exception {
+                new DichVuDanhMuc().capNhatTrangThaiTaiKhoan(actor, value.getTenDangNhap(), next);
+                return null;
+            }
+            @Override protected void done() {
+                try { get(); taiDanhSach(); JOptionPane.showMessageDialog(TaiKhoanPanel.this, "Đổi trạng thái thành công."); }
+                catch (Exception exception) { baoLoi("Không đổi được trạng thái tài khoản.", exception); }
+            }
+        }.execute();
+    }
+
+    private void themTruong(JPanel panel, String label, JComponent component) {
+        panel.add(new JLabel(label));
+        panel.add(component);
+    }
+    private void themNut(JPanel panel, String text, Runnable action) {
+        JButton button = new JButton(text);
+        button.addActionListener(event -> action.run());
+        panel.add(button);
+    }
+    private void themChiTiet(JPanel panel, String label, String value) {
+        panel.add(new JLabel(label));
+        panel.add(new JLabel(value == null ? "" : value));
+    }
+    private void baoLoi(String message) { baoLoi(message, null); }
+    private void baoLoi(String message, Exception exception) {
+        String detail = null;
+        if (exception != null) {
+            Throwable cause = exception;
+            while (cause.getCause() != null
+                    && cause instanceof java.util.concurrent.ExecutionException)
+                cause = cause.getCause();
+            detail = cause.getMessage();
+        }
+        JOptionPane.showMessageDialog(this, detail == null ? message : message + "\n" + detail,
+                "Lỗi", JOptionPane.ERROR_MESSAGE);
+    }
+}

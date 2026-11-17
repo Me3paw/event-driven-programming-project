@@ -1,7 +1,7 @@
 package testsupport;
 
-import connectDB.DBConnection;
-import dao.IdDAO;
+import connectDB.ConnectDB;
+import dao.Id_DAO;
 import entity.*;
 import service.*;
 import java.math.BigDecimal;
@@ -65,7 +65,7 @@ public final class BackendTransactionSmoke {
     newer.setThoiDiemLap(java.time.LocalDateTime.now().minusDays(1));
     f.purchases.luuNhap(f.manager, older); f.purchases.luuNhap(f.manager, newer);
     f.purchases.hoanTat(f.manager, newer.getMaPhieuNhap()); f.purchases.hoanTat(f.manager, older.getMaPhieuNhap());
-    List<LoTonKho> lots = new InventoryService().tonKho(f.manager, product.getMaSanPham());
+    List<LoTonKho> lots = new DichVuTonKho().tonKho(f.manager, product.getMaSanPham());
     check(lots.size() == 2 && newer.getMaPhieuNhap().equals(lots.get(0).getMaPhieuNhap()),
         "FIFO follows completion order rather than draft creation date");
   }
@@ -89,7 +89,7 @@ public final class BackendTransactionSmoke {
     rejects(IllegalArgumentException.class, () -> f.sales.thanhToan(f.manager, changed), "same checkout ID rejects different product");
     changed.getDongHang().get(0).setMaSanPham(product.getMaSanPham()); changed.setMaThamChieuThanhToan("DIFFERENT");
     rejects(IllegalArgumentException.class, () -> f.sales.thanhToan(f.manager, changed), "same checkout ID rejects different payment");
-    Actor cashier = new AuthService().dangNhapActor("thungan01", "MatKhau123".toCharArray());
+    NguoiDung cashier = new DichVuDangNhap().dangNhapNguoiDung("thungan01", "MatKhau123".toCharArray());
     rejects(IllegalArgumentException.class, () -> f.sales.thanhToan(cashier, request), "same checkout ID rejects different actor");
     request.setMaHoaDon(" " + request.getMaHoaDon() + " ");
     check(f.sales.thanhToan(f.manager, request).getMaHoaDon().equals(first.getMaHoaDon()), "checkout normalizes supplied ID before retry locking");
@@ -100,7 +100,7 @@ public final class BackendTransactionSmoke {
         && number("SELECT COUNT(*) FROM HOA_DON WHERE ma_hoa_don=?", lost.getMaHoaDon()) == 1,
         "lost commit acknowledgement resolves to original invoice");
     sql("DELETE FROM CAU_HINH_CUA_HANG WHERE id=1");
-    rejects(IllegalStateException.class, () -> new SettingsService().layChoHoaDon(f.manager), "post-payment receipt settings failure injected");
+    rejects(IllegalStateException.class, () -> new DichVuCauHinh().layChoHoaDon(f.manager), "post-payment receipt settings failure injected");
     check(f.sales.thanhToan(f.manager, lost).getMaHoaDon().equals(recovered.getMaHoaDon()) && f.stock(product) == 18,
         "receipt failure cannot cause another deduction on retry");
     sql("INSERT INTO CAU_HINH_CUA_HANG (id,ten_cua_hang,dia_chi,so_dien_thoai,ty_le_vat) VALUES (1,?,?,?,10)",
@@ -129,22 +129,22 @@ public final class BackendTransactionSmoke {
   }
   private static void sessionPolicy(TestFixtures f) throws Exception {
     SanPham product = f.product(10); f.purchase(product, 10, 0, true);
-    TaiKhoan account = f.account("THU_NGAN"); Actor cashier = f.login(account);
+    TaiKhoan account = f.account("THU_NGAN"); NguoiDung cashier = f.login(account);
     f.masters.capNhatTrangThaiTaiKhoan(f.manager, account.getTenDangNhap(), "KHOA");
     YeuCauThanhToan request = f.request(product, 1);
     rejects(SessionExpiredException.class, () -> f.sales.thanhToan(cashier, request), "locked cashier cannot reuse active session");
     f.masters.capNhatTrangThaiTaiKhoan(f.manager, account.getTenDangNhap(), "HOAT_DONG");
     rejects(SessionExpiredException.class, () -> f.sales.thanhToan(cashier, request), "unlock does not revive old session");
-    Actor fresh = f.login(account); check(f.sales.thanhToan(fresh, request) != null, "fresh login after unlock can sell");
+    NguoiDung fresh = f.login(account); check(f.sales.thanhToan(fresh, request) != null, "fresh login after unlock can sell");
     rejects(IllegalStateException.class, () -> f.masters.xoaTaiKhoan(f.manager, account.getTenDangNhap()), "account referenced by checkout history cannot be deleted");
     f.masters.capNhatTrangThaiNhanVien(f.manager, account.getMaNhanVien(), "NGHI_VIEC");
     rejects(SessionExpiredException.class, () -> f.sales.tonKho(fresh, product.getMaSanPham()), "departed employee session rejected");
     f.masters.capNhatTrangThaiNhanVien(f.manager, account.getMaNhanVien(), "DANG_LAM");
-    TaiKhoan managerAccount = f.account("QUAN_LY"); Actor oldManager = f.login(managerAccount);
+    TaiKhoan managerAccount = f.account("QUAN_LY"); NguoiDung oldManager = f.login(managerAccount);
     managerAccount.setVaiTro("THU_NGAN"); f.masters.luuTaiKhoan(f.manager, managerAccount, null);
     rejects(SessionExpiredException.class, () -> f.masters.timNhanVien(oldManager, null, null), "demoted manager session rejected");
     // Pause checkout after its shared authorization lock, then request revocation.
-    Actor active = f.login(account); YeuCauThanhToan blocked = f.request(product, 1);
+    NguoiDung active = f.login(account); YeuCauThanhToan blocked = f.request(product, 1);
     CountDownLatch stockReached = new CountDownLatch(1), release = new CountDownLatch(1), revoking = new CountDownLatch(1);
     ExecutorService pool = Executors.newFixedThreadPool(2);
     try {
@@ -200,9 +200,9 @@ public final class BackendTransactionSmoke {
         try (Connection connection = admin(); Statement statement = connection.createStatement()) {
           statement.execute("ALTER SEQUENCE dbo.POS_SEQ_" + prefix + " RESTART WITH " + maximum);
         }
-        try (Connection connection = DBConnection.open()) {
-          IdDAO.next(prefix, connection); // Reserve the final suffix; the following call must fail.
-          rejects(IllegalStateException.class, () -> IdDAO.next(prefix, connection), "explicit sequence exhaustion " + prefix);
+        try (Connection connection = ConnectDB.open()) {
+          Id_DAO.taoMaTiepTheo(prefix, connection); // Reserve the final suffix; the following call must fail.
+          rejects(IllegalStateException.class, () -> Id_DAO.taoMaTiepTheo(prefix, connection), "explicit sequence exhaustion " + prefix);
         }
       } finally {
         try (Connection connection = admin(); Statement statement = connection.createStatement()) {
@@ -213,8 +213,8 @@ public final class BackendTransactionSmoke {
   }
   private static void reconciliation(TestFixtures f) throws Exception {
     LocalDate today = LocalDate.now();
-    ReportSummary summary = new ReportService().summary(f.manager, today, today);
+    TongHopBaoCao summary = new DichVuBaoCao().tongHop(f.manager, today, today);
     BigDecimal direct = decimal("SELECT COALESCE(SUM(tong_thanh_toan),0) FROM HOA_DON WHERE trang_thai='DA_THANH_TOAN' AND CAST(thoi_diem_lap AS date)=?", Date.valueOf(today));
-    check(summary.getRevenue().compareTo(direct) == 0, "report revenue reconciles with direct SQL on fixture date");
+    check(summary.getDoanhThu().compareTo(direct) == 0, "report revenue reconciles with direct SQL on fixture date");
   }
 }

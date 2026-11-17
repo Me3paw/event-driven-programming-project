@@ -32,10 +32,10 @@ public class YeuCauThanhToan {
     if (dongHang == null) copy.dongHang = null;
     else for (DongThanhToan line : dongHang) {
       if (line == null) { copy.dongHang.add(null); continue; }
-      DongThanhToan item = new DongThanhToan();
-      item.setMaSanPham(line.getMaSanPham());
-      item.setSoLuong(line.getSoLuong());
-      copy.dongHang.add(item);
+      DongThanhToan dongHang = new DongThanhToan();
+      dongHang.setMaSanPham(line.getMaSanPham());
+      dongHang.setSoLuong(line.getSoLuong());
+      copy.dongHang.add(dongHang);
     }
     return copy;
   }

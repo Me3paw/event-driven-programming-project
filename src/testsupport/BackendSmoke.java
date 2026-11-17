@@ -42,8 +42,8 @@ public final class BackendSmoke {
     System.out.println("BackendSmoke checks: " + checks);
   }
 
-  private static void invalidMasterSaves(final Actor manager) throws Exception {
-    final MasterDataService master = new MasterDataService();
+  private static void invalidMasterSaves(final NguoiDung manager) throws Exception {
+    final DichVuDanhMuc master = new DichVuDanhMuc();
     invalid(new Action() {
       public void run() throws Exception {
         NhanVien value = new NhanVien();
@@ -104,7 +104,7 @@ public final class BackendSmoke {
   }
 
   private static void invoiceScopeAndTiers(TestFixtures f) throws Exception {
-    Actor cashier = new AuthService().dangNhapActor("thungan01", "MatKhau123".toCharArray());
+    NguoiDung cashier = new DichVuDangNhap().dangNhapNguoiDung("thungan01", "MatKhau123".toCharArray());
     SanPham product = f.product(1); f.purchase(product, 2, 0, true);
     HoaDon invoice = f.sales.thanhToan(f.manager, f.request(product, 1));
     check(!f.sales.timHoaDon(f.manager, invoice.getMaHoaDon(), f.manager.getMaNhanVien(), null,
@@ -117,22 +117,22 @@ public final class BackendSmoke {
     f.masters.xoaTaiKhoan(f.manager, account.getTenDangNhap());
     account.setTenDangNhap(f.track("TAI_KHOAN", "test_blank_" + account.getMaNhanVien()));
     rejects(IllegalArgumentException.class, () -> f.masters.luuTaiKhoan(f.manager, account, new char[0]), "new account requires password");
-    List<CustomerTierCount> counts = new ReportService().customerTierCounts(f.manager);
+    List<SoLuongTheoHangThanhVien> counts = new DichVuBaoCao().soLuongTheoHangThanhVien(f.manager);
     check(counts.size() == HangThanhVien.values().length, "report includes every membership tier");
     long total = 0;
     for (int index = 0; index < counts.size(); index++) {
-      check(counts.get(index).getTier().equals(HangThanhVien.values()[index].name()), "membership tier order " + index);
-      total += counts.get(index).getCount();
+      check(counts.get(index).getHang().equals(HangThanhVien.values()[index].name()), "membership tier order " + index);
+      total += counts.get(index).getSoLuong();
     }
     check(total == number("SELECT COUNT(*) FROM KHACH_HANG WHERE trang_thai='HOAT_DONG'"), "membership counts reconcile without fixed seed totals");
   }
 
   private static void permissions(TestFixtures f) throws Exception {
-    Actor cashier = new AuthService().dangNhapActor("thungan01", "MatKhau123".toCharArray());
+    NguoiDung cashier = new DichVuDangNhap().dangNhapNguoiDung("thungan01", "MatKhau123".toCharArray());
     rejects(SecurityException.class, () -> f.masters.timNhanVien(cashier, null, null), "cashier cannot manage staff");
-    rejects(SecurityException.class, () -> new ReportService().summary(cashier, LocalDate.now(), LocalDate.now()), "cashier cannot read manager reports");
+    rejects(SecurityException.class, () -> new DichVuBaoCao().tongHop(cashier, LocalDate.now(), LocalDate.now()), "cashier cannot read manager reports");
     rejects(SecurityException.class, () -> f.sales.baoGia(null, new YeuCauThanhToan()), "anonymous quote denied");
-    check(!new InventoryService().tonKho(cashier, null).isEmpty(), "cashier can inspect stock");
+    check(!new DichVuTonKho().tonKho(cashier, null).isEmpty(), "cashier can inspect stock");
     rejects(IllegalStateException.class, () -> f.masters.xoaTaiKhoan(f.manager, f.manager.getTenDangNhap()), "cannot delete current manager");
     rejects(IllegalStateException.class, () -> f.masters.capNhatTrangThaiNhanVien(f.manager, f.manager.getMaNhanVien(), "NGHI_VIEC"), "cannot remove current employee");
   }
@@ -154,7 +154,7 @@ public final class BackendSmoke {
     rejects(IllegalArgumentException.class, () -> f.purchases.luuNhap(f.manager, purchase), "negative import price rejected");
     SanPham product = f.product(10); f.purchase(product, 100, 0, true);
     KhuyenMai promotion = f.promotion("10", 20L);
-    check(promotion.getTenKhuyenMai().matches(ValidationRules.PROMOTION_NAME), "shared promotion validator accepts percent sign");
+    check(promotion.getTenKhuyenMai().matches(QuyTacKiemTra.PROMOTION_NAME), "shared promotion validator accepts percent sign");
     YeuCauThanhToan request = f.request(product, 1);
     request.setLoaiGiamGia("KHUYEN_MAI"); request.setMaKhuyenMai(promotion.getMaKhuyenMai());
     rejects(IllegalArgumentException.class, () -> f.sales.baoGia(f.manager, request), "promotion below minimum rejected");
@@ -163,13 +163,13 @@ public final class BackendSmoke {
     request.getDongHang().get(0).setSoLuong(3);
     check(f.sales.thanhToan(f.manager, request).getTienGiam().intValueExact() == 3, "promotion above minimum accepted at checkout");
     promotion.setDonToiThieu(null);
-    rejects(IllegalArgumentException.class, () -> new PromotionService().luu(f.manager, promotion), "whole-order minimum remains mandatory");
-    promotion.setDonToiThieu(BigDecimal.TEN); new PromotionService().luu(f.manager, promotion);
+    rejects(IllegalArgumentException.class, () -> new DichVuKhuyenMai().luu(f.manager, promotion), "whole-order minimum remains mandatory");
+    promotion.setDonToiThieu(BigDecimal.TEN); new DichVuKhuyenMai().luu(f.manager, promotion);
     check(true, "10 VND whole-order minimum is valid");
     promotion.setTenKhuyenMai("Giảm giá");
-    rejects(IllegalArgumentException.class, () -> new PromotionService().luu(f.manager, promotion), "promotion prefix required");
+    rejects(IllegalArgumentException.class, () -> new DichVuKhuyenMai().luu(f.manager, promotion), "promotion prefix required");
     promotion.setTenKhuyenMai("Khuyến mãi " + "a".repeat(151));
-    rejects(IllegalArgumentException.class, () -> new PromotionService().luu(f.manager, promotion), "promotion length limit enforced");
+    rejects(IllegalArgumentException.class, () -> new DichVuKhuyenMai().luu(f.manager, promotion), "promotion length limit enforced");
   }
 
   private static void pointsAndRounding(TestFixtures f) throws Exception {
@@ -260,26 +260,26 @@ public final class BackendSmoke {
     rejects(IllegalStateException.class, () -> f.masters.xoaKhachHang(f.manager, customerWithHistory), "customer invoice history preserved");
     rejects(IllegalStateException.class, () -> f.masters.xoaNhaCungCap(f.manager, f.supplier()), "supplier purchase history preserved");
     product.setTrangThai("NGUNG_KINH_DOANH"); f.masters.luuSanPham(f.manager, product);
-    List<ProductSales> top = new ReportService().topProducts(f.manager, LocalDate.now(), LocalDate.now());
-    check(top.stream().anyMatch(row -> product.getMaSanPham().equals(row.getProductId()) && row.getQuantity() == 1), "discontinued product stays in historical best sellers");
+    List<DoanhSoSanPham> top = new DichVuBaoCao().sanPhamBanChay(f.manager, LocalDate.now(), LocalDate.now());
+    check(top.stream().anyMatch(row -> product.getMaSanPham().equals(row.getMaSanPham()) && row.getSoLuong() == 1), "discontinued product stays in historical best sellers");
     f.cancel(invoice);
-    check(new ReportService().topProducts(f.manager, LocalDate.now(), LocalDate.now()).stream()
-        .noneMatch(row -> product.getMaSanPham().equals(row.getProductId())), "cancelled invoice removed from best sellers");
+    check(new DichVuBaoCao().sanPhamBanChay(f.manager, LocalDate.now(), LocalDate.now()).stream()
+        .noneMatch(row -> product.getMaSanPham().equals(row.getMaSanPham())), "cancelled invoice removed from best sellers");
   }
 
   private static void receipt(TestFixtures f) throws Exception {
     HoaDon invoice = new HoaDon(); invoice.setMaHoaDon("HD0000000000001"); invoice.setMaKhachHang("KH001");
     invoice.setDiemTichLuyKiem(10000); invoice.setDiemThuongKiem(500);
-    ReceiptPrintable receipt = new ReceiptPrintable(new SettingsService().lay(f.manager), invoice);
+    ReceiptPrintable receipt = new ReceiptPrintable(new DichVuCauHinh().lay(f.manager), invoice);
     check(receipt.lines().contains("Điểm tích lũy lần này: 10000") && receipt.lines().contains("Điểm thưởng nhận được: 500"), "receipt distinguishes loyalty and reward points");
     invoice.setMaKhachHang(null);
-    check(new ReceiptPrintable(new SettingsService().lay(f.manager), invoice).lines().stream().noneMatch(line -> line.startsWith("Điểm")), "guest receipt does not imply points award");
+    check(new ReceiptPrintable(new DichVuCauHinh().lay(f.manager), invoice).lines().stream().noneMatch(line -> line.startsWith("Điểm")), "guest receipt does not imply points award");
     for (int index = 0; index < 100; index++) {
       ChiTietHoaDon line = new ChiTietHoaDon(); line.setMaSanPham("893000000001");
       line.setTenSanPham("Sản phẩm tiếng Việt rất dài " + index + " " + "X".repeat(160));
       line.setSoLuong(1); invoice.getChiTiet().add(line);
     }
-    receipt = new ReceiptPrintable(new SettingsService().lay(f.manager), invoice);
+    receipt = new ReceiptPrintable(new DichVuCauHinh().lay(f.manager), invoice);
     Paper paper = new Paper(); paper.setSize(300, 400); paper.setImageableArea(20, 30, 260, 330);
     PageFormat format = new PageFormat(); format.setPaper(paper);
     int pages = 0;

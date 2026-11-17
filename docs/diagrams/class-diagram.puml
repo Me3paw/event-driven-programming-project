@@ -6,16 +6,16 @@ skinparam packageStyle rectangle
 package graphicUI {
   class PosApplication
   class PosFrame
-  class CategoryPanel
-  class CustomerPanel
-  class InventoryPanel
-  class InvoicePanel
-  class ProductPanel
-  class PromotionPanel
-  class PurchasePanel
-  class ReportPanel
-  class StaffPanel
-  class SupplierPanel
+  class LoaiSanPhamPanel
+  class KhachHangPanel
+  class TonKhoPanel
+  class HoaDonPanel
+  class SanPhamPanel
+  class KhuyenMaiPanel
+  class PhieuNhapPanel
+  class ThongKePanel
+  class NhanVienPanel
+  class NhaCungCapPanel
 }
 
 package components {
@@ -27,111 +27,111 @@ package components {
 }
 
 package service {
-  class Access
-  class SessionTransaction
-  class CheckoutFingerprint
-  class Actor {
+  class KiemTraQuyen
+  class GiaoDichPhien
+  class DauVanThanhToan
+  class NguoiDung {
     +getTenDangNhap(): String
     +getMaNhanVien(): String
     +getVaiTro(): String
     +isQuanLy(): boolean
   }
-  class AuthService {
-    +dangNhapActor(tenDangNhap: String, matKhau: char[]): Actor
+  class DichVuDangNhap {
+    +dangNhapNguoiDung(tenDangNhap: String, matKhau: char[]): NguoiDung
   }
-  class MasterDataService {
-    +luuNhanVien(actor: Actor, value: NhanVien): void
-    +luuTaiKhoan(actor: Actor, value: TaiKhoan, password: char[]): void
-    +luuLoai(actor: Actor, value: LoaiSanPham): void
-    +luuSanPham(actor: Actor, value: SanPham): void
-    +luuKhachHang(actor: Actor, value: KhachHang): void
-    +luuNhaCungCap(actor: Actor, value: NhaCungCap): void
-    +timNhanVien(actor: Actor, keyword: String, state: String): List<NhanVien>
-    +timTaiKhoan(actor: Actor, keyword: String, role: String, state: String): List<TaiKhoan>
-    +timLoai(actor: Actor, keyword: String): List<LoaiSanPham>
-    +timSanPham(actor: Actor, keyword: String, category: String, state: String, minPrice: BigDecimal, maxPrice: BigDecimal): List<SanPham>
-    +timKhachHang(actor: Actor, keyword: String, state: String): List<KhachHang>
-    +chiTietKhachHang(actor: Actor, id: String): CustomerProfile
-    +khachHangTheoHang(actor: Actor, tier: String): List<KhachHang>
-    +timNhaCungCap(actor: Actor, keyword: String): List<NhaCungCap>
-    +xoaNhanVien(actor: Actor, id: String): void
-    +xoaTaiKhoan(actor: Actor, id: String): void
-    +xoaLoai(actor: Actor, id: String): void
-    +xoaSanPham(actor: Actor, id: String): void
-    +xoaKhachHang(actor: Actor, id: String): void
-    +xoaNhaCungCap(actor: Actor, id: String): void
-    +capNhatTrangThaiNhanVien(actor: Actor, id: String, state: String): void
-    +capNhatTrangThaiTaiKhoan(actor: Actor, id: String, state: String): void
+  class DichVuDanhMuc {
+    +luuNhanVien(actor: NguoiDung, value: NhanVien): void
+    +luuTaiKhoan(actor: NguoiDung, value: TaiKhoan, password: char[]): void
+    +luuLoai(actor: NguoiDung, value: LoaiSanPham): void
+    +luuSanPham(actor: NguoiDung, value: SanPham): void
+    +luuKhachHang(actor: NguoiDung, value: KhachHang): void
+    +luuNhaCungCap(actor: NguoiDung, value: NhaCungCap): void
+    +timNhanVien(actor: NguoiDung, keyword: String, state: String): List<NhanVien>
+    +timTaiKhoan(actor: NguoiDung, keyword: String, role: String, state: String): List<TaiKhoan>
+    +timLoai(actor: NguoiDung, keyword: String): List<LoaiSanPham>
+    +timSanPham(actor: NguoiDung, keyword: String, category: String, state: String, minPrice: BigDecimal, maxPrice: BigDecimal): List<SanPham>
+    +timKhachHang(actor: NguoiDung, keyword: String, state: String): List<KhachHang>
+    +chiTietKhachHang(actor: NguoiDung, id: String): HoSoKhachHang
+    +khachHangTheoHang(actor: NguoiDung, tier: String): List<KhachHang>
+    +timNhaCungCap(actor: NguoiDung, keyword: String): List<NhaCungCap>
+    +xoaNhanVien(actor: NguoiDung, id: String): void
+    +xoaTaiKhoan(actor: NguoiDung, id: String): void
+    +xoaLoai(actor: NguoiDung, id: String): void
+    +xoaSanPham(actor: NguoiDung, id: String): void
+    +xoaKhachHang(actor: NguoiDung, id: String): void
+    +xoaNhaCungCap(actor: NguoiDung, id: String): void
+    +capNhatTrangThaiNhanVien(actor: NguoiDung, id: String, state: String): void
+    +capNhatTrangThaiTaiKhoan(actor: NguoiDung, id: String, state: String): void
   }
-  class PurchaseService {
-    +luuNhap(actor: Actor, value: PhieuNhap): void
-    +tim(actor: Actor, keyword: String, state: String): List<PhieuNhap>
-    +chiTiet(actor: Actor, id: String): PhieuNhap
-    +hoanTat(actor: Actor, id: String): void
-    +xoaNhap(actor: Actor, id: String): void
-    +capNhatChiTiet(actor: Actor, id: String, lines: List<ChiTietPhieuNhap>): void
+  class DichVuNhapHang {
+    +luuNhap(actor: NguoiDung, value: PhieuNhap): void
+    +tim(actor: NguoiDung, keyword: String, state: String): List<PhieuNhap>
+    +chiTiet(actor: NguoiDung, id: String): PhieuNhap
+    +hoanTat(actor: NguoiDung, id: String): void
+    +xoaNhap(actor: NguoiDung, id: String): void
+    +capNhatChiTiet(actor: NguoiDung, id: String, lines: List<ChiTietPhieuNhap>): void
   }
-  class InventoryService {
-    +tonKho(actor: Actor, keyword: String): List<LoTonKho>
-    +giamTonFifo(actor: Actor, id: String, product: String, amount: int, reason: String): void
-    +timDieuChinh(actor: Actor, keyword: String): List<DieuChinhTon>
-    +chiTietDieuChinh(actor: Actor, id: String): DieuChinhTon
+  class DichVuTonKho {
+    +tonKho(actor: NguoiDung, keyword: String): List<LoTonKho>
+    +giamTonFifo(actor: NguoiDung, id: String, product: String, amount: int, reason: String): void
+    +timDieuChinh(actor: NguoiDung, keyword: String): List<DieuChinhTon>
+    +chiTietDieuChinh(actor: NguoiDung, id: String): DieuChinhTon
   }
-  class PromotionService {
-    +tim(actor: Actor, keyword: String, state: String): List<KhuyenMai>
-    +capNhatTrangThai(actor: Actor, id: String, state: String): void
-    +xoa(actor: Actor, id: String): void
-    +luu(actor: Actor, value: KhuyenMai): void
+  class DichVuKhuyenMai {
+    +tim(actor: NguoiDung, keyword: String, state: String): List<KhuyenMai>
+    +capNhatTrangThai(actor: NguoiDung, id: String, state: String): void
+    +xoa(actor: NguoiDung, id: String): void
+    +luu(actor: NguoiDung, value: KhuyenMai): void
   }
-  class SaleService {
-    +maHoaDonTiepTheo(actor: Actor): String
-    +baoGia(actor: Actor, request: YeuCauThanhToan): BaoGia
-    +thanhToan(actor: Actor, request: YeuCauThanhToan): HoaDon
-    +activePromotions(actor: Actor, products: Set<String>, time: LocalDateTime): List<KhuyenMai>
-    +huyHoaDon(actor: Actor, id: String, reason: String, manager: String, password: char[]): void
-    +timHoaDon(actor: Actor, keyword: String, employee: String, state: String): List<HoaDon>
-    +timHoaDon(actor: Actor, keyword: String, employee: String, customer: String, state: String, method: String, from: LocalDate, to: LocalDate): List<HoaDon>
-    +chiTietHoaDon(actor: Actor, id: String): HoaDon
+  class DichVuBanHang {
+    +maHoaDonTiepTheo(actor: NguoiDung): String
+    +baoGia(actor: NguoiDung, request: YeuCauThanhToan): BaoGia
+    +thanhToan(actor: NguoiDung, request: YeuCauThanhToan): HoaDon
+    +khuyenMaiHieuLuc(actor: NguoiDung, products: Set<String>, time: LocalDateTime): List<KhuyenMai>
+    +huyHoaDon(actor: NguoiDung, id: String, reason: String, manager: String, password: char[]): void
+    +timHoaDon(actor: NguoiDung, keyword: String, employee: String, state: String): List<HoaDon>
+    +timHoaDon(actor: NguoiDung, keyword: String, employee: String, customer: String, state: String, method: String, from: LocalDate, to: LocalDate): List<HoaDon>
+    +chiTietHoaDon(actor: NguoiDung, id: String): HoaDon
   }
-  class ReportService {
-    +summary(actor: Actor, from: LocalDate, to: LocalDate): ReportSummary
-    +dailyRevenue(actor: Actor, from: LocalDate, to: LocalDate): List<DailyRevenue>
-    +topProducts(actor: Actor, from: LocalDate, to: LocalDate): List<ProductSales>
-    +lowStock(actor: Actor): List<LowStockProduct>
-    +customerTierCounts(actor: Actor): List<CustomerTierCount>
-    +customersByTier(actor: Actor, tier: String): List<KhachHang>
+  class DichVuBaoCao {
+    +tongHop(actor: NguoiDung, from: LocalDate, to: LocalDate): TongHopBaoCao
+    +doanhThuTheoNgay(actor: NguoiDung, from: LocalDate, to: LocalDate): List<DoanhThuTheoNgay>
+    +sanPhamBanChay(actor: NguoiDung, from: LocalDate, to: LocalDate): List<DoanhSoSanPham>
+    +sanPhamSapHetHang(actor: NguoiDung): List<SanPhamSapHetHang>
+    +soLuongTheoHangThanhVien(actor: NguoiDung): List<SoLuongTheoHangThanhVien>
+    +khachHangTheoHang(actor: NguoiDung, tier: String): List<KhachHang>
   }
-  class SettingsService {
-    +lay(actor: Actor): CauHinhCuaHang
-    +layChoHoaDon(actor: Actor): CauHinhCuaHang
-    +luu(actor: Actor, value: CauHinhCuaHang): void
+  class DichVuCauHinh {
+    +lay(actor: NguoiDung): CauHinhCuaHang
+    +layChoHoaDon(actor: NguoiDung): CauHinhCuaHang
+    +luu(actor: NguoiDung, value: CauHinhCuaHang): void
   }
-  class ReportSummary
-  class DailyRevenue
-  class ProductSales
-  class LowStockProduct
-  class CustomerTierCount
-  class CustomerProfile
+  class TongHopBaoCao
+  class DoanhThuTheoNgay
+  class DoanhSoSanPham
+  class SanPhamSapHetHang
+  class SoLuongTheoHangThanhVien
+  class HoSoKhachHang
   class DongThanhToan
   class YeuCauThanhToan
   class BaoGia
 }
 
 package dao {
-  class BaoCaoDAO
-  class CauHinhCuaHangDAO
+  class BaoCao_DAO
+  class CauHinhCuaHang_DAO
   class DieuChinhTonDAO
-  class HoaDonDAO
-  class IdDAO
-  class KhachHangDAO
-  class KhuyenMaiDAO
-  class LoaiSanPhamDAO
-  class LoTonKhoDAO
-  class NhaCungCapDAO
-  class NhanVienDAO
-  class PhieuNhapDAO
-  class SanPhamDAO
-  class TaiKhoanDAO
+  class HoaDon_DAO
+  class Id_DAO
+  class KhachHang_DAO
+  class KhuyenMai_DAO
+  class LoaiSanPham_DAO
+  class LoTonKho_DAO
+  class NhaCungCap_DAO
+  class NhanVien_DAO
+  class PhieuNhap_DAO
+  class SanPham_DAO
+  class TaiKhoan_DAO
 }
 
 package entity {
@@ -166,90 +166,90 @@ package entity {
   enum VaiTro
 }
 
-package connectDB { class DBConnection { +open(): Connection } }
+package connectDB { class ConnectDB { +open(): Connection } }
 
 PosApplication --> PosFrame
-PosFrame *-- CategoryPanel
-PosFrame *-- CustomerPanel
-PosFrame *-- InventoryPanel
-PosFrame *-- InvoicePanel
-PosFrame *-- ProductPanel
-PosFrame *-- PromotionPanel
-PosFrame *-- PurchasePanel
-PosFrame *-- ReportPanel
-PosFrame *-- StaffPanel
-PosFrame *-- SupplierPanel
-InvoicePanel --> ReceiptPrintable
+PosFrame *-- LoaiSanPhamPanel
+PosFrame *-- KhachHangPanel
+PosFrame *-- TonKhoPanel
+PosFrame *-- HoaDonPanel
+PosFrame *-- SanPhamPanel
+PosFrame *-- KhuyenMaiPanel
+PosFrame *-- PhieuNhapPanel
+PosFrame *-- ThongKePanel
+PosFrame *-- NhanVienPanel
+PosFrame *-- NhaCungCapPanel
+HoaDonPanel --> ReceiptPrintable
 PosFrame --> ReceiptPrintable
-ReportPanel --> BarChart
-CategoryPanel --> DialogActions
-CustomerPanel --> DialogActions
-InventoryPanel --> DialogActions
-ProductPanel --> DialogActions
-PromotionPanel --> DialogActions
-PurchasePanel --> DialogActions
-StaffPanel --> DialogActions
-SupplierPanel --> DialogActions
+ThongKePanel --> BarChart
+LoaiSanPhamPanel --> DialogActions
+KhachHangPanel --> DialogActions
+TonKhoPanel --> DialogActions
+SanPhamPanel --> DialogActions
+KhuyenMaiPanel --> DialogActions
+PhieuNhapPanel --> DialogActions
+NhanVienPanel --> DialogActions
+NhaCungCapPanel --> DialogActions
 
-CategoryPanel --> MasterDataService
-CustomerPanel --> MasterDataService
-ProductPanel --> MasterDataService
-StaffPanel --> MasterDataService
-SupplierPanel --> MasterDataService
-PurchasePanel --> PurchaseService
-InventoryPanel --> InventoryService
-InventoryPanel --> ReportService
-InvoicePanel --> SaleService
-InvoicePanel --> SettingsService
-InvoicePanel --> DialogActions
-PromotionPanel --> PromotionService
-ReportPanel --> ReportService
-PosFrame --> AuthService
-PosFrame --> SaleService
-PosFrame --> SettingsService
-PosFrame --> MasterDataService
+LoaiSanPhamPanel --> DichVuDanhMuc
+KhachHangPanel --> DichVuDanhMuc
+SanPhamPanel --> DichVuDanhMuc
+NhanVienPanel --> DichVuDanhMuc
+NhaCungCapPanel --> DichVuDanhMuc
+PhieuNhapPanel --> DichVuNhapHang
+TonKhoPanel --> DichVuTonKho
+TonKhoPanel --> DichVuBaoCao
+HoaDonPanel --> DichVuBanHang
+HoaDonPanel --> DichVuCauHinh
+HoaDonPanel --> DialogActions
+KhuyenMaiPanel --> DichVuKhuyenMai
+ThongKePanel --> DichVuBaoCao
+PosFrame --> DichVuDangNhap
+PosFrame --> DichVuBanHang
+PosFrame --> DichVuCauHinh
+PosFrame --> DichVuDanhMuc
 
-AuthService --> TaiKhoanDAO
-MasterDataService --> KhachHangDAO
-MasterDataService --> HoaDonDAO
-MasterDataService --> LoaiSanPhamDAO
-MasterDataService --> NhaCungCapDAO
-MasterDataService --> NhanVienDAO
-MasterDataService --> SanPhamDAO
-MasterDataService --> TaiKhoanDAO
-MasterDataService --> AuthService
-PurchaseService --> PhieuNhapDAO
-PurchaseService --> LoTonKhoDAO
-InventoryService --> DieuChinhTonDAO
-InventoryService --> LoTonKhoDAO
-PromotionService --> KhuyenMaiDAO
-SaleService --> HoaDonDAO
-SaleService --> KhachHangDAO
-SaleService --> KhuyenMaiDAO
-SaleService --> LoTonKhoDAO
-SaleService --> SanPhamDAO
-SaleService --> CauHinhCuaHangDAO
-SaleService --> AuthService
-ReportService --> BaoCaoDAO
-ReportService --> KhachHangDAO
-SettingsService --> CauHinhCuaHangDAO
+DichVuDangNhap --> TaiKhoan_DAO
+DichVuDanhMuc --> KhachHang_DAO
+DichVuDanhMuc --> HoaDon_DAO
+DichVuDanhMuc --> LoaiSanPham_DAO
+DichVuDanhMuc --> NhaCungCap_DAO
+DichVuDanhMuc --> NhanVien_DAO
+DichVuDanhMuc --> SanPham_DAO
+DichVuDanhMuc --> TaiKhoan_DAO
+DichVuDanhMuc --> DichVuDangNhap
+DichVuNhapHang --> PhieuNhap_DAO
+DichVuNhapHang --> LoTonKho_DAO
+DichVuTonKho --> DieuChinhTonDAO
+DichVuTonKho --> LoTonKho_DAO
+DichVuKhuyenMai --> KhuyenMai_DAO
+DichVuBanHang --> HoaDon_DAO
+DichVuBanHang --> KhachHang_DAO
+DichVuBanHang --> KhuyenMai_DAO
+DichVuBanHang --> LoTonKho_DAO
+DichVuBanHang --> SanPham_DAO
+DichVuBanHang --> CauHinhCuaHang_DAO
+DichVuBanHang --> DichVuDangNhap
+DichVuBaoCao --> BaoCao_DAO
+DichVuBaoCao --> KhachHang_DAO
+DichVuCauHinh --> CauHinhCuaHang_DAO
 
-MasterDataService --> Access
-PurchaseService --> Access
-InventoryService --> Access
-PromotionService --> Access
-SaleService --> Access
-ReportService --> Access
-SettingsService --> Access
+DichVuDanhMuc --> KiemTraQuyen
+DichVuNhapHang --> KiemTraQuyen
+DichVuTonKho --> KiemTraQuyen
+DichVuKhuyenMai --> KiemTraQuyen
+DichVuBanHang --> KiemTraQuyen
+DichVuBaoCao --> KiemTraQuyen
+DichVuCauHinh --> KiemTraQuyen
 
-AuthService --> DBConnection
-MasterDataService --> DBConnection
-PurchaseService --> DBConnection
-InventoryService --> DBConnection
-PromotionService --> DBConnection
-SaleService --> DBConnection
-ReportService --> DBConnection
-SettingsService --> DBConnection
+DichVuDangNhap --> ConnectDB
+DichVuDanhMuc --> ConnectDB
+DichVuNhapHang --> ConnectDB
+DichVuTonKho --> ConnectDB
+DichVuKhuyenMai --> ConnectDB
+DichVuBanHang --> ConnectDB
+DichVuBaoCao --> ConnectDB
+DichVuCauHinh --> ConnectDB
 
 NhanVien --> TaiKhoan
 LoaiSanPham --> SanPham
@@ -272,10 +272,10 @@ PhanBoXuatLo --> LoTonKho
 KhuyenMai --> KhuyenMaiSanPham
 KhuyenMaiSanPham --> SanPham
 ReceiptPrinting --> ReceiptPrintable
-SaleService --> SessionTransaction
-SaleService --> CheckoutFingerprint
-SaleService --> IdDAO
-SessionTransaction --> Access
-SessionTransaction --> DBConnection
+DichVuBanHang --> GiaoDichPhien
+DichVuBanHang --> DauVanThanhToan
+DichVuBanHang --> Id_DAO
+GiaoDichPhien --> KiemTraQuyen
+GiaoDichPhien --> ConnectDB
 
 @enduml

@@ -1,11 +1,11 @@
 package testsupport;
 
-import connectDB.DBConnection;
+import connectDB.ConnectDB;
 import entity.SanPham;
 import entity.TaiKhoan;
 import graphicUI.PosFrame;
-import service.Actor;
-import service.SaleService;
+import service.NguoiDung;
+import service.DichVuBanHang;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Field;
@@ -103,9 +103,9 @@ public final class PosGuiSmoke {
         check(fixtures.stock(first) == 28, "resolving unknown checkout does not deduct stock again");
         fill(recent, 1);
         Object saved = value(() -> field(frame, "saleState"));
-        Actor old = value(() -> (Actor) field(frame, "actor"));
+        NguoiDung old = value(() -> (NguoiDung) field(frame, "actor"));
         fixtures.masters.capNhatTrangThaiTaiKhoan(fixtures.manager, account.getTenDangNhap(), "KHOA");
-        rejects(service.SessionExpiredException.class, () -> new SaleService().tonKho(old, first.getMaSanPham()), "GUI actor detects revocation");
+        rejects(service.SessionExpiredException.class, () -> new DichVuBanHang().tonKho(old, first.getMaSanPham()), "GUI actor detects revocation");
         waitFor(() -> value(() -> field(frame, "actor") == null), "revocation returns to login"); closeDialogs();
         fixtures.masters.capNhatTrangThaiTaiKhoan(fixtures.manager, account.getTenDangNhap(), "HOAT_DONG");
         login(account.getTenDangNhap());
@@ -114,7 +114,7 @@ public final class PosGuiSmoke {
       } finally {
         closeDialogs(); if (frame != null) edt(() -> frame.dispose());
         // Include invoices even if an assertion interrupted a UI response.
-        try (Connection connection = DBConnection.open(); Statement statement = connection.createStatement();
+        try (Connection connection = ConnectDB.open(); Statement statement = connection.createStatement();
             ResultSet result = statement.executeQuery("SELECT ma_hoa_don FROM HOA_DON WHERE checkout_actor='" + account.getTenDangNhap() + "'")) {
           while (result.next()) fixtures.track("HOA_DON", result.getString(1));
         }
@@ -137,7 +137,7 @@ public final class PosGuiSmoke {
     Thread.sleep(400);
   }
   private static void staleQuote(TestFixtures f, SanPham oldProduct, SanPham recentProduct) throws Exception {
-    try (Connection blocker = DBConnection.open()) {
+    try (Connection blocker = ConnectDB.open()) {
       int spid;
       try (Statement statement = blocker.createStatement(); ResultSet result = statement.executeQuery("SELECT @@SPID")) { result.next(); spid = result.getInt(1); }
       blocker.setAutoCommit(false);
@@ -202,7 +202,7 @@ public final class PosGuiSmoke {
     for (int index = 0; index < 8; index++) { Thread.sleep(100); closeDialogs(); }
   }
   private static void trackInvoices(TestFixtures f, SanPham product) throws Exception {
-    try (Connection connection = DBConnection.open(); PreparedStatement statement = connection.prepareStatement("SELECT ma_hoa_don FROM CHI_TIET_HOA_DON WHERE ma_san_pham=?")) {
+    try (Connection connection = ConnectDB.open(); PreparedStatement statement = connection.prepareStatement("SELECT ma_hoa_don FROM CHI_TIET_HOA_DON WHERE ma_san_pham=?")) {
       statement.setString(1, product.getMaSanPham());
       try (ResultSet result = statement.executeQuery()) { while (result.next()) f.track("HOA_DON", result.getString(1)); }
     }
