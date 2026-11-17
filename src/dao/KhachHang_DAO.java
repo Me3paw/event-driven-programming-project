@@ -1,0 +1,120 @@
+package dao;
+
+import entity.KhachHang;
+import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class KhachHang_DAO {
+  public void luu(KhachHang value, Connection c) throws SQLException {
+    String sql = "MERGE KHACH_HANG AS target USING (VALUES (?, ?, ?, ?)) AS source "
+        + "(ma_khach_hang,ho_ten,so_dien_thoai,trang_thai) "
+        + "ON target.ma_khach_hang=source.ma_khach_hang WHEN MATCHED THEN UPDATE SET "
+        + "ho_ten=source.ho_ten,so_dien_thoai=source.so_dien_thoai,trang_thai=source.trang_thai "
+        + "WHEN NOT MATCHED THEN INSERT (ma_khach_hang,ho_ten,so_dien_thoai,diem_hien_co,"
+        + "diem_tich_luy,trang_thai) VALUES (source.ma_khach_hang,source.ho_ten,"
+        + "source.so_dien_thoai,0,0,source.trang_thai);";
+    try (PreparedStatement s = c.prepareStatement(sql)) {
+      s.setString(1, value.getMaKhachHang());
+      s.setString(2, value.getHoTen());
+      s.setString(3, value.getSoDienThoai());
+      s.setString(4, value.getTrangThai());
+      s.executeUpdate();
+    }
+  }
+  public KhachHang khoa(String maKhachHang, Connection c) throws SQLException {
+    try (PreparedStatement s =
+             c.prepareStatement("SELECT * FROM KHACH_HANG WITH (UPDLOCK, ROWLOCK) WHERE ma_khach_hang = ?")) {
+      s.setString(1, maKhachHang);
+      try (ResultSet r = s.executeQuery()) {
+        return r.next() ? taoTuKetQua(r) : null;
+      }
+    }
+  }
+  public KhachHang timTheoMa(String maKhachHang, Connection c) throws SQLException {
+    try (PreparedStatement s =
+             c.prepareStatement("SELECT * FROM KHACH_HANG WHERE ma_khach_hang = ?")) {
+      s.setString(1, maKhachHang);
+      try (ResultSet r = s.executeQuery()) {
+        return r.next() ? taoTuKetQua(r) : null;
+      }
+    }
+  }
+  public BigDecimal tongChiTieu(String maKhachHang, Connection c) throws SQLException {
+    try (PreparedStatement s =
+             c.prepareStatement("SELECT COALESCE(SUM(tong_thanh_toan),0) FROM HOA_DON WHERE "
+                 + "ma_khach_hang=? AND trang_thai='DA_THANH_TOAN'")) {
+      s.setString(1, maKhachHang);
+      try (ResultSet r = s.executeQuery()) {
+        r.next();
+        return r.getBigDecimal(1);
+      }
+    }
+  }
+  public List<KhachHang> timTheoHang(String hangThanhVien, Connection c) throws SQLException {
+    List<KhachHang> out = new ArrayList<KhachHang>();
+    String q = "SELECT * FROM KHACH_HANG WHERE ma_khach_hang <> 'KH000' AND CASE WHEN diem_tich_luy>=1000000 THEN 'VANG' WHEN "
+        + "diem_tich_luy>=200000 THEN 'BAC' WHEN diem_tich_luy>=50000 THEN 'DONG' ELSE "
+        + "'CHUA_XEP_HANG' END=? ORDER BY ma_khach_hang";
+    try (PreparedStatement s = c.prepareStatement(q)) {
+      s.setString(1, hangThanhVien);
+      try (ResultSet r = s.executeQuery()) {
+        while (r.next()) out.add(taoTuKetQua(r));
+      }
+    }
+    return out;
+  }
+  public List<KhachHang> timKiem(String tuKhoa, String trangThai, Connection c)
+      throws SQLException {
+    List<KhachHang> values = new ArrayList<KhachHang>();
+    try (PreparedStatement s = c.prepareStatement(
+             "SELECT * FROM KHACH_HANG WHERE ma_khach_hang <> 'KH000' AND (? IS NULL OR ma_khach_hang LIKE ? OR ho_ten LIKE ? "
+             + "OR so_dien_thoai LIKE ?) "
+             + "AND (? IS NULL OR trang_thai=?) ORDER BY ma_khach_hang")) {
+      s.setString(1, tuKhoa);
+      s.setString(2, tuKhoa == null ? null : "%" + tuKhoa + "%");
+      s.setString(3, tuKhoa == null ? null : "%" + tuKhoa + "%");
+      s.setString(4, tuKhoa == null ? null : "%" + tuKhoa + "%");
+      s.setString(5, trangThai);
+      s.setString(6, trangThai);
+      try (ResultSet r = s.executeQuery()) {
+        while (r.next()) values.add(taoTuKetQua(r));
+      }
+    }
+    return values;
+  }
+  public String maTiepTheo(Connection c) throws SQLException {
+    return Id_DAO.taoMaTiepTheo("KH", c);
+  }
+  public void capNhatDiem(String maKhachHang, long thayDoiDiemThuong, long thayDoiDiemTichLuy, Connection c)
+      throws SQLException {
+    try (PreparedStatement s =
+             c.prepareStatement("UPDATE KHACH_HANG SET diem_hien_co=diem_hien_co+?, "
+                 + "diem_tich_luy=diem_tich_luy+? WHERE ma_khach_hang=?")) {
+      s.setLong(1, thayDoiDiemThuong);
+      s.setLong(2, thayDoiDiemTichLuy);
+      s.setString(3, maKhachHang);
+      s.executeUpdate();
+    }
+  }
+  public void xoa(String id, Connection c) throws SQLException {
+    try (PreparedStatement s = c.prepareStatement("DELETE FROM KHACH_HANG WHERE ma_khach_hang=?")) {
+      s.setString(1, id);
+      s.executeUpdate();
+    }
+  }
+  private KhachHang taoTuKetQua(ResultSet r) throws SQLException {
+    KhachHang v = new KhachHang();
+    v.setMaKhachHang(r.getString("ma_khach_hang"));
+    v.setHoTen(r.getString("ho_ten"));
+    v.setSoDienThoai(r.getString("so_dien_thoai"));
+    v.setDiemHienCo(r.getLong("diem_hien_co"));
+    v.setDiemTichLuy(r.getLong("diem_tich_luy"));
+    v.setTrangThai(r.getString("trang_thai"));
+    return v;
+  }
+}

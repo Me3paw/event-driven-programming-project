@@ -1,6 +1,6 @@
 package graphicUI;
 
-import connectDB.DBConnection;
+import connectDB.ConnectDB;
 
 import javax.swing.SwingUtilities;
 
@@ -19,9 +19,9 @@ public final class PosApplication {
             return;
         }
         if (args.length == 1 && "--db-smoke".equals(args[0])) {
-            System.exit(DBConnection.smoke());
+            System.exit(ConnectDB.smoke());
         }
-        System.err.println("Usage: PosApplication [--db-smoke]");
+        System.err.println("Tham số không hợp lệ. Sử dụng: PosApplication [--db-smoke]");
         System.exit(2);
     }
 }

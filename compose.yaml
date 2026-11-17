@@ -1,23 +1,23 @@
 name: pos-cua-hang-tien-loi
 
 services:
-  db:
-    image: mariadb:11.8
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
-      MARIADB_DATABASE: cua_hang_tien_loi
-      MARIADB_USER: cua_hang_app
-      MARIADB_PASSWORD: cua_hang_dev
-      MARIADB_ROOT_PASSWORD: cua_hang_root_dev
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${SQLSERVER_SA_PASSWORD:?Set SQLSERVER_SA_PASSWORD in .env}
+      MSSQL_MEMORY_LIMIT_MB: "2048"
     ports:
-      - "127.0.0.1:3307:3306"
+      - "127.0.0.1:14330:1433"
     volumes:
-      - pos-data:/var/lib/mysql
-      - ./sql/Script.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - pos-sqlserver-data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 2s
-      timeout: 2s
-      retries: 30
+      test: ["CMD-SHELL", "SQLCMDPASSWORD=\"$$MSSQL_SA_PASSWORD\" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -Q 'SELECT 1' -o /dev/null"]
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 15s
 
 volumes:
-  pos-data:
+  pos-sqlserver-data:

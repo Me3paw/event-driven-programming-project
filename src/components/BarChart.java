@@ -37,7 +37,8 @@ public final class BarChart extends JPanel {
             g.setColor(UiTheme.BLUE);
             g.fillRoundRect(x, y, Math.max(12, width - 14), height, 8, 8);
             g.setColor(UiTheme.MUTED);
-            g.drawString(labels[i], x, getHeight() - 10);
+            if (count <= 12 || i % Math.max(1, (count + 11) / 12) == 0)
+                g.drawString(labels[i] == null ? "" : labels[i], x, getHeight() - 10);
         }
         g.dispose();
     }

@@ -1,0 +1,118 @@
+SQL Server and Java 17 setup and verification audit
+2026-11-16 | source baseline kimxuyen 156d6bf82d0f4876f96501076425e88836ce5960
+
+Scope
+Setup/runtime configuration and documentation updated. No business-logic fixes,
+report edits, commits, pushes, or changes to the old MariaDB volume.
+
+Runtime
+Host: meepaw@cachyos-x8664, x86_64 Linux.
+JDK: /usr/lib/jvm/java-17-openjdk, 17.0.20.1; system default left unchanged.
+SQL Server: official Microsoft SQL Server 2022 Developer container.
+Image digest: sha256:4525e3efac9f3e241cb003bb2ff2a82818b502f37e12049d788b1a9fa7e13b7f
+Container: pos-cua-hang-tien-loi-sqlserver-1; healthy; localhost:14330.
+Canonical development database: cua_hang_tien_loi, 17 tables, 100 seed invoices.
+App connects with separate reader/writer login, not sa. Secrets: ignored .env.
+Audit databases: hsk_audit_20261116 and hsk_audit_20261116b; retained for evidence.
+All failure/fixture mutations were restricted to the audit databases.
+
+Verification
+- Java 17 compilation, JDBC smoke and actual Swing login passed.
+- Full -Xlint:all has one unchecked cast warning, PurchasePanel.java:235.
+- Baseline DAO searches, manager/cashier permissions, purchase immutability passed.
+- Two-lot FIFO sale and restoration of exact lots on cancellation passed.
+- Insufficient cash, failed electronic payment and oversell roll back passed.
+- Membership boundaries 49999/50000/200000/1000000 passed.
+- Redeem/cancel restores spent points and retains earned points passed.
+- Two simultaneous sales competing for insufficient stock: exactly one succeeded;
+  no negative stock. This does not prove arbitrary concurrency schedules.
+- Revenue summary reconciled with direct SQL for the tested date.
+- Swing login, dashboard, sale, products, purchases, invoices, stock, promotions,
+  accounts screens captured in isolated Xvfb, not the user's active desktop.
+- PDF export produced a nonempty PDF; full PDF layout was not audited.
+- Original BackendSmoke fails at cashier login because it requests 'thungan'
+  instead of current seed account 'thungan01'. Old fixture problems remain.
+
+Reverified earlier findings
+1. HIGH: Duplicate checkout. Identical service request without explicit invoice
+   ID was accepted twice, producing HD1794810500626 and HD1794810500664 and two
+   stock deductions. PosFrame.java:804-818 has no busy/disabled-payment guard;
+   SaleService.java:239 generates a new ID per call. UI duplicate-click path is
+   source verified; the duplicate acceptance was reproduced at service level.
+2. HIGH: Postcommit failure. A sale remained persisted when the subsequent
+   store-settings read failed. Reproduced by removing/restoring the settings row
+   in the audit database. PosFrame.java:1620-1643 treats the combined operation
+   as failure and clears the cart only after all reads succeed. Failure dialog
+   itself was not automated; the exact backend sequence was reproduced.
+3. MEDIUM: Stale quote. With an older product query blocked in SQL Server, a newer
+   15 VND product quote finished. Releasing the old query changed the subtotal
+   to 10000 VND and line amount to 10000 while cart ID remained 893999999002.
+   PosFrame.java:1581-1603 lacks request/cart revision checks.
+4. MEDIUM: Historical best-seller disappearance when current product status is
+   changed to discontinued. Reproduced. BaoCaoDAO.java:64-72.
+5. MEDIUM: Discount and VAT double rounding reproduced via actual SaleService
+   quotes: 15 * 3.30% becomes 1 rather than single HALF_UP result 0.
+   SaleService.java:312-313,353,426-427.
+6. MEDIUM: LSP999 and LSP1000 present -> nextId returns existing LSP1000.
+   Reproduced with actual SQL Server MAX ordering. LoaiSanPhamDAO.java:60+.
+   NV999/KH999 -> NV1000/KH1000 also exceed three-digit validator/schema limits;
+   earlier isolated probes established generation, not a live 999-record load.
+7. SPEC CONFLICT: One-point redemption rejected, 1000-point step enforced.
+   Reproduced. SaleService.java:339-346; report agrees with code, old spec differs.
+8. TEST GAP: Legacy backend fixture names, IDs, SQL dialect and expected totals
+   remain inconsistent. BackendSmoke.java:47 fails on canonical seed login.
+9. RESOLVED BY AUTHORIZED SETUP: Java 8/JRE11 driver mismatch. Java 17 driver
+   loads and JDBC succeeds. Runtime now uses SQL Server; MariaDB fallback is not
+   retained as a purported equivalent validation route.
+10. SOURCE/DOCUMENTATION DIFFERENCES STILL OPEN: zero-price rejection,
+    whole-order promotion minimum, unconditional refusal to delete some unused
+    master records. These were not silently changed.
+
+Additional problems found
+11. HIGH: POS clipping. Default 1280x780 hides totals panel below visible area;
+    minimum 1024x680 also hides tender/payment button. No surrounding vertical
+    scroll pane for the right column. Screenshots sale-1280.png/sale-1024.png;
+    PosFrame.java:973-1011. Existing screenshots were taken under Xvfb with the
+    host's default Swing look and feel.
+12. HIGH: Java printing produces a blank page. ReceiptPrintable.print returns
+    PAGE_EXISTS for page 0 without drawing anything. Actual invocation on a
+    white 900x1000 image left zero nonwhite pixels. PDF uses a different render
+    method and succeeds. ReceiptPrintable.java:139-141.
+13. MEDIUM: A locked account retains its existing Actor and can still complete
+    a sale. Reproduced after locking thungan01, then restored account status.
+    Access.actor only checks non-null; login checks do not revoke active sessions.
+    This is confirmed behavior and an account-locking policy gap; the spec
+    explicitly promises denial of new login, not immediate session revocation.
+14. MEDIUM: Invoice ID validation disagrees with SQL schema. HD901 is accepted
+    for quote by service but payment fails SQL CHECK requiring exactly HD plus
+    13 digits. Service regex is HD plus >=3 digits. ScriptMySql.sql:344-348;
+    SaleService.java:234-239; ValidationRules.java:18.
+15. MEDIUM: Receipt labels reward points as loyalty points. Real sale earns
+    loyalty=10000 and rewards=500, but receipt says 'Diem tich luy lan nay: 500'
+    (actual output Vietnamese). ReceiptPrintable.java:67-68 uses diemThuongKiem
+    under the diem tich luy label.
+16. LOW: Promotion validator rejects its own suggested name 'Khuyen mai giam 10%'
+    (actual strings accented). PROMOTION_NAME regex excludes %, while the error
+    message recommends an example containing %. Actual service rejection
+    reproduced. ValidationRules.java:9; PromotionService.java:56-57.
+
+Report status
+Report_Nhom12.docx was not modified. Prior independent Terra + parent archive
+checks found 56/56 embedded PNG entries fail CRC checks, while text is readable.
+Word rendering/recovery behavior was not tested. Prior report content findings
+remain: cash-only tender/change wording, KH000 request sentinel vs SQL NULL,
+missing cancellation reauthentication description, stale screenshot prose, and
+optional employee account cardinality. SQL Server choice is correct per owner.
+
+Evidence (local, ignored files; may contain test-only business data)
+.dev/audit/AuditSql.java, sql-results.txt (initial run exposed invoice ID mismatch),
+sql-results-2.txt (valid 15-character invoice IDs, 9 passes/7 spec or bug failures),
+ExtendedAudit.java, extended-results.txt, GuiAudit.java, gui-results-2.txt,
+legacy-results.txt, login.png, dashboard-1280.png, sale-1280.png, sale-1024.png,
+products-1280.png, purchases-1280.png, invoices-1280.png, stock-1280.png,
+promotions-1280.png, accounts-1280.png, receipt.pdf.
+
+Limits
+No general clean bill of health. No Eclipse/IntelliJ interactive import test,
+physical printer test, exhaustive GUI workflow test or exhaustive deadlock study.
+Business logic remains at audited branch baseline; only setup/config/docs changed.

@@ -1,11 +1,21 @@
 package entity;
 
 public class TaiKhoan {
+  private long accountVersion;
+  private long employeeVersion;
+  public long getPhienBanTaiKhoan() { return accountVersion; }
+  public long getPhienBanNhanVien() { return employeeVersion; }
+  public void setAccountVersion(long value) { accountVersion = value; }
+  public void setEmployeeVersion(long value) { employeeVersion = value; }
+
   private String tenDangNhap;
   private String matKhauBam;
   private String vaiTro;
   private String trangThai;
   private String maNhanVien;
+  private String trangThaiNhanVien;
+  private String tenNhanVien;
+  private String chucVuNhanVien;
 
   public String getTenDangNhap() {
     return tenDangNhap;
@@ -36,5 +46,23 @@ public class TaiKhoan {
   }
   public void setMaNhanVien(String maNhanVien) {
     this.maNhanVien = maNhanVien;
+  }
+  public String getTrangThaiNhanVien() {
+    return trangThaiNhanVien;
+  }
+  public void setTrangThaiNhanVien(String trangThaiNhanVien) {
+    this.trangThaiNhanVien = trangThaiNhanVien;
+  }
+  public String getTenNhanVien() {
+    return tenNhanVien;
+  }
+  public void setTenNhanVien(String tenNhanVien) {
+    this.tenNhanVien = tenNhanVien;
+  }
+  public String getChucVuNhanVien() {
+    return chucVuNhanVien;
+  }
+  public void setChucVuNhanVien(String chucVuNhanVien) {
+    this.chucVuNhanVien = chucVuNhanVien;
   }
 }
